@@ -36,7 +36,8 @@ os.makedirs(OUTPUT_GAIA_DIR, exist_ok=True)
 
 
 class BasicAgent:
-    """Very small shim around the langgraph returned by `build_graph()`."""
+    """Shim around the langgraph returned by `build_graph()` that
+    extracts only what follows the `[FINAL ANSWER]` tag."""
 
     TAG = "[FINAL ANSWER]"
 
@@ -45,19 +46,17 @@ class BasicAgent:
         self.graph = build_graph()
         print("✅  BasicAgent ready!")
 
-    def __call__(self, question: str, input_file: Optional[str]) -> str:
-        print(f"⚙️   Processing: {question[:60]}…")
+    def __call__(self,
+                 question: str,
+                 input_file: Optional[str] = None) -> str:
+        """Run the graph and return just the text after `[FINAL ANSWER]`."""
         msgs = [HumanMessage(content=question)]
-        chain_out = self.graph.invoke(
-            {"messages": msgs, "input_file": input_file})
+        out = self.graph.invoke({"messages": msgs,
+                                 "input_file": input_file})
+        raw = out["messages"][-1].content
 
-        raw = chain_out["messages"][-1].content
-
-        # ── keep only what follows the *last* “[FINAL ANSWER]” tag ──
         idx = raw.rfind(self.TAG)
-        answer = raw[idx + len(self.TAG):] if idx != -1 else raw
-
-        return answer.strip()
+        return raw[idx + len(self.TAG):].strip() if idx != -1 else raw.strip()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
