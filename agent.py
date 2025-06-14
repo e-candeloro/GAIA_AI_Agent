@@ -1,5 +1,4 @@
 import os
-import json
 from pathlib import Path
 from typing import Annotated, Optional, TypedDict, List
 
@@ -11,17 +10,14 @@ from langchain_core.messages import (
     HumanMessage,
     SystemMessage,
 )
-from langchain_core.tools import tool
-from langchain_google_genai import ChatGoogleGenerativeAI
+
 from langchain_groq import ChatGroq
 from langgraph.graph import START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
 
 from tools import get_tools
-from langchain.globals import set_verbose
 
-set_verbose(True)
 
 # ---------------------- helpers ------------------------------------------------
 ENCODING = tiktoken.get_encoding("cl100k_base")
@@ -36,14 +32,16 @@ def build_graph():
     load_dotenv()
 
     base_prompt = PromptTemplate(
-        template=Path(__file__).with_name("base_prompt.txt").read_text("utf-8"),
+        template=Path(__file__).with_name(
+            "base_prompt.txt").read_text("utf-8"),
         input_variables=["tools", "file_info"],
     )
 
     TOOLS = get_tools()
 
     llm = ChatGroq(
-        model="qwen/qwen3-32b",  # valid Groq model id # was llama3-8b-8192
+        # valid Groq model id - less powerful but cheaper alternative: llama3-8b-8192
+        model="qwen/qwen3-32b",
         temperature=0,
         api_key=os.getenv("GROQ_API_KEY"),
     )
@@ -100,7 +98,7 @@ if __name__ == "__main__":
         {
             "messages": [
                 HumanMessage(
-                    content="Search the surname of the equine veterinarian mentioned in 1.E Exercises from the chemistry materials licensed by Marisa Alviar-Agnew & Henry Agnew under the CK-12 license in LibreText's Introductory Chemistry materials as compiled 08/21/2023?"
+                    content="What is the capital of France? "
                 )
             ],
             "input_file": "",
