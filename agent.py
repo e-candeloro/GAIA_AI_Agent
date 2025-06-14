@@ -83,8 +83,12 @@ def build_graph():
     This function defines the nodes and edges of the graph.
     """
 
+    load_dotenv()
+    GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+
     # setup llm and tools
-    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash-preview-05-20")
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash-preview-05-20", google_api_key=GOOGLE_API_KEY)
     tools = get_tools()
     llm_with_tools = llm.bind_tools(tools)
 

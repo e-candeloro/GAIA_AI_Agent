@@ -309,6 +309,18 @@ wheels = [
 ]
 
 [[package]]
+name = "authlib"
+version = "1.6.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cryptography" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/a2/9d/b1e08d36899c12c8b894a44a5583ee157789f26fc4b176f8e4b6217b56e1/authlib-1.6.0.tar.gz", hash = "sha256:4367d32031b7af175ad3a323d571dc7257b7099d55978087ceae4a0d88cd3210", size = 158371 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/84/29/587c189bbab1ccc8c86a03a5d0e13873df916380ef1be461ebe6acebf48d/authlib-1.6.0-py2.py3-none-any.whl", hash = "sha256:91685589498f79e8655e8a8947431ad6288831d643f11c55c2143ffcc738048d", size = 239981 },
+]
+
+[[package]]
 name = "babel"
 version = "2.17.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1125,6 +1137,12 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/6f/0d/676653dd6cd8dca60ed253d93a29c6e769e55dccf40929ac4b127b7953ff/gradio-5.34.0-py3-none-any.whl", hash = "sha256:a5eeb9bd2db923fc4b39abceac27886e5e05f20e89c0026bbdd2e2be6d5fbe32", size = 54270681 },
 ]
 
+[package.optional-dependencies]
+oauth = [
+    { name = "authlib" },
+    { name = "itsdangerous" },
+]
+
 [[package]]
 name = "gradio-client"
 version = "1.10.3"
@@ -1281,7 +1299,7 @@ dependencies = [
     { name = "arxiv" },
     { name = "crawl4ai" },
     { name = "duckduckgo-search" },
-    { name = "gradio" },
+    { name = "gradio", extra = ["oauth"] },
     { name = "huggingface-hub" },
     { name = "ipykernel" },
     { name = "jupyter" },
@@ -1305,7 +1323,7 @@ requires-dist = [
     { name = "arxiv", specifier = ">=2.2.0" },
     { name = "crawl4ai", specifier = ">=0.6.3" },
     { name = "duckduckgo-search", specifier = ">=8.0.2" },
-    { name = "gradio", specifier = ">=5.34.0" },
+    { name = "gradio", extras = ["oauth"], specifier = ">=5.34.0" },
     { name = "huggingface-hub", specifier = ">=0.33.0" },
     { name = "ipykernel", specifier = ">=6.29.5" },
     { name = "jupyter", specifier = ">=1.1.1" },
@@ -1558,6 +1576,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/7c/1a/3c8edc664e06e6bd06cce40c6b22da5f1429aa4224d0c590f3be21c91ead/isoduration-20.11.0.tar.gz", hash = "sha256:ac2f9015137935279eac671f94f89eb00584f940f5dc49462a0c4ee692ba1bd9", size = 11649 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/7b/55/e5326141505c5d5e34c5e0935d2908a74e4561eca44108fbfb9c13d2911a/isoduration-20.11.0-py3-none-any.whl", hash = "sha256:b2904c2a4228c3d44f409c8ae8e2370eb21a26f7ac2ec5446df141dde3452042", size = 11321 },
+]
+
+[[package]]
+name = "itsdangerous"
+version = "2.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/9c/cb/8ac0172223afbccb63986cc25049b154ecfb5e85932587206f42317be31d/itsdangerous-2.2.0.tar.gz", hash = "sha256:e0050c0b7da1eea53ffaf149c0cfbb5c6e2e2b69c4bef22c81fa6eb73e5f6173", size = 54410 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/04/96/92447566d16df59b2a776c0fb82dbc4d9e07cd95062562af01e408583fc4/itsdangerous-2.2.0-py3-none-any.whl", hash = "sha256:c6242fc49e35958c8b15141343aa660db5fc54d4f13a1db01a3f5891b98700ef", size = 16234 },
 ]
 
 [[package]]
