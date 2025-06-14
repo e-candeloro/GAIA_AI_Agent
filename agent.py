@@ -97,5 +97,5 @@ if __name__ == "__main__":
     load_dotenv()
     graph = build_graph()
     out = graph.invoke(
-        {"messages": [HumanMessage(content="Give me the name of the image subject. The image is in the file")], "input_file": "./notebooks/tmp/questions_files/Cat_August_2010-4.jpg"})
+        {"messages": [HumanMessage(content="What happened ")], "input_file": ""})
     print(out["messages"][-1].content)

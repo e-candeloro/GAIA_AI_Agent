@@ -22,6 +22,7 @@ from groq import Groq
 from langchain.agents import tool
 from langchain_community.document_loaders import ArxivLoader, WikipediaLoader
 from langchain_community.tools.tavily_search import TavilySearchResults
+from langchain_community.utilities import GoogleSerperAPIWrapper
 from langchain_core.documents import Document
 from langchain_core.messages.ai import AIMessage
 from langchain_core.tools import tool
@@ -193,26 +194,71 @@ def wiki_search(query: str) -> str:
 # ─────────────────────────  web_search   ──────────────────────────
 
 
+# ``Document`` and ``_format_docs`` are provided by the host application.
+
+######################################################################
+# Public API                                                         #
+######################################################################
 @tool
 def web_search(query: str, max_results: int = 3) -> str:
+    # docstring
     """
-    Return up to `max_results` DuckDuckGo search results for *query*.
-
+    Return up to `max_results` Google search results for *query*.
     The output is formatted by `_format_docs`, so it matches the schema your
     other tools already use.
     """
-    docs = []
-    with DDGS() as ddgs:
-        for hit in ddgs.text(query, max_results=max_results):
+
+    docs: List[Document] = []
+
+    try:
+        wrapper = GoogleSerperAPIWrapper(k=max_results)
+        result_json = wrapper.results(query)
+
+        # Primary path — structured organic hits
+        for hit in result_json.get("organic", [])[:max_results]:
             docs.append(
                 Document(
-                    page_content=hit.get("body") or hit.get("snippet") or "",
-                    metadata={"source": hit.get(
-                        "href") or hit.get("url"), "page": ""},
+                    page_content=hit.get("snippet", ""),
+                    metadata={"source": hit.get("link"), "page": ""},
                 )
             )
 
-    return _format_docs(docs)
+        # Fallback — single‑string answer if no organic results
+        if not docs:
+            answer = wrapper.run(query)
+            docs.append(
+                Document(
+                    page_content=answer,
+                    metadata={"source": "serper", "page": ""},
+                )
+            )
+    except Exception:
+        # Total failure → return empty formatted structure
+        pass
+
+    return _format_docs(docs[:max_results])
+
+
+# @tool
+# def web_search(query: str, max_results: int = 3) -> str:
+#     """
+#     Return up to `max_results` DuckDuckGo search results for *query*.
+
+#     The output is formatted by `_format_docs`, so it matches the schema your
+#     other tools already use.
+#     """
+#     docs = []
+#     with DDGS() as ddgs:
+#         for hit in ddgs.text(query, max_results=max_results):
+#             docs.append(
+#                 Document(
+#                     page_content=hit.get("body") or hit.get("snippet") or "",
+#                     metadata={"source": hit.get(
+#                         "href") or hit.get("url"), "page": ""},
+#                 )
+#             )
+
+#     return _format_docs(docs)
 
 # ─────────────────────────  arxiv_search ──────────────────────────
 
