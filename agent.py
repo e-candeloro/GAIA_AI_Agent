@@ -97,5 +97,5 @@ if __name__ == "__main__":
     load_dotenv()
     graph = build_graph()
     out = graph.invoke(
-        {"messages": [HumanMessage(content="Compute 8+2")], "input_file": None})
+        {"messages": [HumanMessage(content="Read the document at /home/ettore/projects/personal/agents/hf_agent_gaia_30/tools.py and summarize it")], "input_file": ""})
     print(out["messages"][-1].content)

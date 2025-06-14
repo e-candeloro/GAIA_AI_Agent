@@ -1,7 +1,3 @@
-from markitdown import MarkItDown
-from groq import Groq
-from langchain_google_genai import ChatGoogleGenerativeAI
-from typing import Optional
 import base64
 import cmath
 import json
@@ -22,6 +18,7 @@ import trafilatura
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from duckduckgo_search import DDGS
+from groq import Groq
 from langchain.agents import tool
 from langchain_community.document_loaders import ArxivLoader, WikipediaLoader
 from langchain_community.tools.tavily_search import TavilySearchResults
@@ -34,13 +31,8 @@ from langchain_huggingface import (ChatHuggingFace, HuggingFaceEmbeddings,
                                    HuggingFaceEndpoint)
 from langgraph.graph import START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
+from markitdown import MarkItDown
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
-
-from code_interpreter import CodeInterpreter  # <-- the class you pasted above
-from image_processing import *
-
-
-interpreter_instance = CodeInterpreter()
 
 load_dotenv()
 ### =============== MATHEMATICAL TOOLS =============== ###
@@ -342,64 +334,7 @@ def search_links_for_match(
     return matched_links or ["No matches found."]
 
 
-# code_interpreter_tools.py
-
-# 1. create ONE sandbox instance that sticks around
-sandbox = CodeInterpreter(
-    allowed_modules=[
-        "numpy", "pandas", "matplotlib", "scipy", "sklearn",
-        "math", "random", "statistics", "datetime", "collections",
-        "itertools", "functools", "operator", "re", "json",
-        "sympy", "networkx", "nltk", "PIL", "pytesseract", "uuid", "tempfile", "requests", "urllib"
-    ],  # trim to what you need
-    max_execution_time=10                               # seconds; tune as required
-)
-
-# 2. LangChain tool: secure Python
-
-
-@tool("run_python_safe", return_direct=True)
-def run_python_safe(code: str) -> str:
-    """
-    Execute a Python snippet inside the CodeInterpreter sandbox.
-
-    Args:
-        code (str): Pure Python (no back-ticks); avoid long-running loops.
-    Returns:
-        str: Std-out if success, or formatted error message.
-    """
-    res = sandbox.execute_code(code, language="python")
-    if res["status"] == "success":
-        out = res["stdout"].strip()
-        return out if out else "✅ Code ran with no output."
-    return f"❌ Python error:\n{res['stderr']}"
-
-# 3. LangChain tool: secure SQL (SQLite)
-
-
-@tool("run_sql_safe", return_direct=True)
-def run_sql_safe(sql: str) -> str:
-    """
-    Execute an SQL statement against the sandbox’s temporary SQLite database.
-
-    Args:
-        sql (str): SQL query or DDL/DML statement.
-    Returns:
-        str: Query head (for SELECT) or a success message.
-    """
-    res = sandbox.execute_code(sql, language="sql")
-    if res["status"] == "success":
-        if res["dataframes"]:
-            # Pretty-print the first five rows of the result
-            df_head = res["dataframes"][0]["head"]
-            rows = [" | ".join(map(str, r.values())) for r in df_head.values()]
-            return "\n".join(rows) if rows else "(0 rows)"
-        return res["stdout"]
-    return f"❌ SQL error:\n{res['stderr']}"
-
-
 ### =============== DOCUMENT PROCESSING TOOLS =============== ###
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # MarkItDown initialisation
@@ -679,7 +614,6 @@ tools = [
     list_webpage_links,
     extract_webpage_text,
     search_links_for_match,
-    run_python_safe,
     save_and_read_file,
     download_file_from_url,
     # extract_text_from_image,
@@ -708,11 +642,3 @@ def get_tools() -> list:
     This can be used to dynamically load tools in the agent.
     """
     return tools
-
-
-if __name__ == "__main__":
-    # Example usage
-    # describe image
-
-    read_document.invoke(
-        {"file_path": "/home/ettore/projects/personal/agents/hf_agent_gaia_30/README.md"})
