@@ -25,8 +25,9 @@ from duckduckgo_search import DDGS
 from groq import Groq
 from langchain.agents import tool
 from langchain_community.document_loaders import ArxivLoader, WikipediaLoader
-from langchain_community.tools.tavily_search import \
-    TavilySearchResults  # replaces Serper
+from langchain_community.tools.tavily_search import (
+    TavilySearchResults,
+)  # replaces Serper
 from langchain_community.utilities import GoogleSerperAPIWrapper
 from langchain_core.documents import Document
 from langchain_core.tools import tool
@@ -64,10 +65,10 @@ def calculator(expr: str) -> float:
 
     Accepted syntax
     ---------------
-    • Literals: integers or floats (e.g. ``2``, ``3.14``)  
-    • Operators: ``+``, ``-``, ``*``, ``/``, ``**``  
-    • Unary minus (``-5``)  
-    • Functions/consts from ``math`` (e.g. ``sin(0.5)``, ``pi``)  
+    • Literals: integers or floats (e.g. ``2``, ``3.14``)
+    • Operators: ``+``, ``-``, ``*``, ``/``, ``**``
+    • Unary minus (``-5``)
+    • Functions/consts from ``math`` (e.g. ``sin(0.5)``, ``pi``)
     • Parentheses for grouping
 
     Parameters
@@ -186,10 +187,11 @@ def _format_docs(docs: Sequence, max_chars: int = 5000) -> str:
         meta = doc.metadata
         snippet = doc.page_content[:max_chars].strip()
         chunks.append(
-            f'<Document source="{meta.get("source")}" page="{meta.get("page","")}">\n'
+            f'<Document source="{meta.get("source")}" page="{meta.get("page", "")}">\n'
             f"{snippet}\n</Document>"
         )
     return _SEPARATOR.join(chunks)
+
 
 # ─────────────────────────  wiki_search  ──────────────────────────
 
@@ -199,6 +201,7 @@ def wiki_search(query: str) -> str:
     """Return up to 2 Wikipedia pages about *query*."""
     docs = WikipediaLoader(query=query, load_max_docs=2).load()
     return _format_docs(docs)
+
 
 # ─────────────────────────  web_search   ──────────────────────────
 
@@ -252,13 +255,13 @@ def wiki_search(query: str) -> str:
 def web_search(query: str, max_results: int = 5) -> str:
     """
     Web search powered by Tavily.
-    Requires `TAVILY_API_KEY` in env. 
+    Requires `TAVILY_API_KEY` in env.
     Returns up to `max_results` results formatted with `_format_docs`.
     """
     docs: list[Document] = []
     try:
         tavily = TavilySearchResults(k=max_results)
-        hits = tavily.run(query)                      # -> list[dict]
+        hits = tavily.run(query)  # -> list[dict]
         for hit in hits:
             docs.append(
                 Document(
@@ -282,6 +285,8 @@ async def crawl_page(url: str) -> str:
     async with AsyncWebCrawler() as crawler:
         res = await crawler.arun(url=url)
         return res.markdown
+
+
 # @tool
 # def web_search(query: str, max_results: int = 3) -> str:
 #     """
@@ -311,6 +316,7 @@ def arxiv_search(query: str) -> str:
     """Return up to 3 recent ArXiv papers about *query*."""
     docs = ArxivLoader(query=query, load_max_docs=3).load()
     return _format_docs(docs)
+
 
 # ---------- 1. Search → list of links -----------------------
 
@@ -351,6 +357,7 @@ def list_webpage_links(url: str, same_domain_only: bool = False) -> list[str]:
 
     return sorted(links)
 
+
 ### =============== DOCUMENT PROCESSING TOOLS =============== ###
 
 
@@ -361,8 +368,7 @@ def list_webpage_links(url: str, same_domain_only: bool = False) -> list[str]:
 #     is delegated to Azure Document Intelligence.
 # ─────────────────────────────────────────────────────────────────────────────
 _DOCINTEL_ENDPOINT = os.getenv("DOCINTEL_ENDPOINT")  # set in env if needed
-_MD = MarkItDown(enable_plugins=False,
-                 docintel_endpoint=_DOCINTEL_ENDPOINT or None)
+_MD = MarkItDown(enable_plugins=False, docintel_endpoint=_DOCINTEL_ENDPOINT or None)
 
 
 @tool("read_document", return_direct=True)
@@ -591,6 +597,7 @@ def describe_image(local_path: str) -> str:
 
 # ──────────────────────── audio tool ──────────────────────────────
 
+
 @tool("transcribe_audio", return_direct=True)
 def transcribe_audio(audio_path: str) -> str:
     """
@@ -626,14 +633,28 @@ def transcribe_audio(audio_path: str) -> str:
 
 tools = [
     # math & utils
-    calculator, multiply, add, subtract, divide, modulus, power, square_root,
+    calculator,
+    multiply,
+    add,
+    subtract,
+    divide,
+    modulus,
+    power,
+    square_root,
     # retrieval
-    wiki_search, web_search, arxiv_search, list_webpage_links,
+    wiki_search,
+    web_search,
+    arxiv_search,
+    list_webpage_links,
     # file IO
-    save_and_read_file, download_file_from_url, read_document,
-    analyze_csv_file, analyze_excel_file,
+    save_and_read_file,
+    download_file_from_url,
+    read_document,
+    analyze_csv_file,
+    analyze_excel_file,
     # vision / audio
-    describe_image, transcribe_audio,
+    describe_image,
+    transcribe_audio,
 ]
 
 

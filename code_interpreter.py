@@ -16,14 +16,36 @@ from PIL import Image
 
 
 class CodeInterpreter:
-    def __init__(self, allowed_modules=None, max_execution_time=30, working_directory=None):
+    def __init__(
+        self, allowed_modules=None, max_execution_time=30, working_directory=None
+    ):
         """Initialize the code interpreter with safety measures."""
         self.allowed_modules = allowed_modules or [
-            "numpy", "pandas", "matplotlib", "scipy", "sklearn",
-            "math", "random", "statistics", "datetime", "collections",
-            "itertools", "functools", "operator", "re", "json",
-            "sympy", "networkx", "nltk", "PIL", "pytesseract",
-            "cmath", "uuid", "tempfile", "requests", "urllib"
+            "numpy",
+            "pandas",
+            "matplotlib",
+            "scipy",
+            "sklearn",
+            "math",
+            "random",
+            "statistics",
+            "datetime",
+            "collections",
+            "itertools",
+            "functools",
+            "operator",
+            "re",
+            "json",
+            "sympy",
+            "networkx",
+            "nltk",
+            "PIL",
+            "pytesseract",
+            "cmath",
+            "uuid",
+            "tempfile",
+            "requests",
+            "urllib",
         ]
         self.max_execution_time = max_execution_time
         self.working_directory = working_directory or os.path.join(os.getcwd())
@@ -37,8 +59,7 @@ class CodeInterpreter:
             "plt": plt,
             "Image": Image,
         }
-        self.temp_sqlite_db = os.path.join(
-            tempfile.gettempdir(), "code_exec.db")
+        self.temp_sqlite_db = os.path.join(tempfile.gettempdir(), "code_exec.db")
 
     def execute_code(self, code: str, language: str = "python") -> Dict[str, Any]:
         """Execute the provided code in the selected programming language."""
@@ -52,7 +73,7 @@ class CodeInterpreter:
             "stderr": "",
             "result": None,
             "plots": [],
-            "dataframes": []
+            "dataframes": [],
         }
 
         try:
@@ -83,15 +104,18 @@ class CodeInterpreter:
             "stderr": "",
             "result": None,
             "plots": [],
-            "dataframes": []
+            "dataframes": [],
         }
 
         try:
             exec_dir = os.path.join(self.working_directory, execution_id)
             os.makedirs(exec_dir, exist_ok=True)
-            plt.switch_backend('Agg')
+            plt.switch_backend("Agg")
 
-            with contextlib.redirect_stdout(output_buffer), contextlib.redirect_stderr(error_buffer):
+            with (
+                contextlib.redirect_stdout(output_buffer),
+                contextlib.redirect_stderr(error_buffer),
+            ):
                 exec_result = exec(code, self.globals)
 
                 if plt.get_fignums():
@@ -100,21 +124,21 @@ class CodeInterpreter:
                         img_path = os.path.join(exec_dir, f"plot_{i}.png")
                         fig.savefig(img_path)
                         with open(img_path, "rb") as img_file:
-                            img_data = base64.b64encode(
-                                img_file.read()).decode('utf-8')
-                            result["plots"].append({
-                                "figure_number": fig_num,
-                                "data": img_data
-                            })
+                            img_data = base64.b64encode(img_file.read()).decode("utf-8")
+                            result["plots"].append(
+                                {"figure_number": fig_num, "data": img_data}
+                            )
 
                 for var_name, var_value in self.globals.items():
                     if isinstance(var_value, pd.DataFrame) and len(var_value) > 0:
-                        result["dataframes"].append({
-                            "name": var_name,
-                            "head": var_value.head().to_dict(),
-                            "shape": var_value.shape,
-                            "dtypes": str(var_value.dtypes)
-                        })
+                        result["dataframes"].append(
+                            {
+                                "name": var_name,
+                                "head": var_value.head().to_dict(),
+                                "shape": var_value.shape,
+                                "dtypes": str(var_value.dtypes),
+                            }
+                        )
 
             result["status"] = "success"
             result["stdout"] = output_buffer.getvalue()
@@ -129,7 +153,11 @@ class CodeInterpreter:
     def _execute_bash(self, code: str, execution_id: str) -> dict:
         try:
             completed = subprocess.run(
-                code, shell=True, capture_output=True, text=True, timeout=self.max_execution_time
+                code,
+                shell=True,
+                capture_output=True,
+                text=True,
+                timeout=self.max_execution_time,
             )
             return {
                 "execution_id": execution_id,
@@ -138,7 +166,7 @@ class CodeInterpreter:
                 "stderr": completed.stderr,
                 "result": None,
                 "plots": [],
-                "dataframes": []
+                "dataframes": [],
             }
         except subprocess.TimeoutExpired:
             return {
@@ -148,7 +176,7 @@ class CodeInterpreter:
                 "stderr": "Execution timed out.",
                 "result": None,
                 "plots": [],
-                "dataframes": []
+                "dataframes": [],
             }
 
     def _execute_sql(self, code: str, execution_id: str) -> dict:
@@ -159,7 +187,7 @@ class CodeInterpreter:
             "stderr": "",
             "result": None,
             "plots": [],
-            "dataframes": []
+            "dataframes": [],
         }
         try:
             conn = sqlite3.connect(self.temp_sqlite_db)
@@ -169,12 +197,14 @@ class CodeInterpreter:
                 columns = [description[0] for description in cur.description]
                 rows = cur.fetchall()
                 df = pd.DataFrame(rows, columns=columns)
-                result["dataframes"].append({
-                    "name": "query_result",
-                    "head": df.head().to_dict(),
-                    "shape": df.shape,
-                    "dtypes": str(df.dtypes)
-                })
+                result["dataframes"].append(
+                    {
+                        "name": "query_result",
+                        "head": df.head().to_dict(),
+                        "shape": df.shape,
+                        "dtypes": str(df.dtypes),
+                    }
+                )
             else:
                 conn.commit()
 
@@ -199,7 +229,9 @@ class CodeInterpreter:
 
             compile_proc = subprocess.run(
                 ["gcc", source_path, "-o", binary_path],
-                capture_output=True, text=True, timeout=self.max_execution_time
+                capture_output=True,
+                text=True,
+                timeout=self.max_execution_time,
             )
             if compile_proc.returncode != 0:
                 return {
@@ -209,12 +241,14 @@ class CodeInterpreter:
                     "stderr": compile_proc.stderr,
                     "result": None,
                     "plots": [],
-                    "dataframes": []
+                    "dataframes": [],
                 }
 
             run_proc = subprocess.run(
                 [binary_path],
-                capture_output=True, text=True, timeout=self.max_execution_time
+                capture_output=True,
+                text=True,
+                timeout=self.max_execution_time,
             )
             return {
                 "execution_id": execution_id,
@@ -223,7 +257,7 @@ class CodeInterpreter:
                 "stderr": run_proc.stderr,
                 "result": None,
                 "plots": [],
-                "dataframes": []
+                "dataframes": [],
             }
         except Exception as e:
             return {
@@ -233,7 +267,7 @@ class CodeInterpreter:
                 "stderr": str(e),
                 "result": None,
                 "plots": [],
-                "dataframes": []
+                "dataframes": [],
             }
 
     def _execute_java(self, code: str, execution_id: str) -> dict:
@@ -246,7 +280,9 @@ class CodeInterpreter:
 
             compile_proc = subprocess.run(
                 ["javac", source_path],
-                capture_output=True, text=True, timeout=self.max_execution_time
+                capture_output=True,
+                text=True,
+                timeout=self.max_execution_time,
             )
             if compile_proc.returncode != 0:
                 return {
@@ -256,12 +292,14 @@ class CodeInterpreter:
                     "stderr": compile_proc.stderr,
                     "result": None,
                     "plots": [],
-                    "dataframes": []
+                    "dataframes": [],
                 }
 
             run_proc = subprocess.run(
                 ["java", "-cp", temp_dir, "Main"],
-                capture_output=True, text=True, timeout=self.max_execution_time
+                capture_output=True,
+                text=True,
+                timeout=self.max_execution_time,
             )
             return {
                 "execution_id": execution_id,
@@ -270,7 +308,7 @@ class CodeInterpreter:
                 "stderr": run_proc.stderr,
                 "result": None,
                 "plots": [],
-                "dataframes": []
+                "dataframes": [],
             }
         except Exception as e:
             return {
@@ -280,5 +318,5 @@ class CodeInterpreter:
                 "stderr": str(e),
                 "result": None,
                 "plots": [],
-                "dataframes": []
+                "dataframes": [],
             }

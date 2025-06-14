@@ -49,7 +49,8 @@ class BasicAgent:
         out = self.graph.invoke({"messages": msgs, "input_file": input_file})
         raw = out["messages"][-1].content
         idx = raw.rfind(self.TAG)
-        return raw[idx + len(self.TAG):].strip() if idx != -1 else raw.strip()
+        return raw[idx + len(self.TAG) :].strip() if idx != -1 else raw.strip()
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers
@@ -70,7 +71,9 @@ def _dump_answers(payload: List[Dict[str, str]]) -> str:
     return fname
 
 
-def _download_task_file(task_id: str, file_name: str, base_url: str = DEFAULT_API_URL, timeout: int = 30) -> Optional[str]:
+def _download_task_file(
+    task_id: str, file_name: str, base_url: str = DEFAULT_API_URL, timeout: int = 30
+) -> Optional[str]:
     """Fetch an attachment for a question, streaming to disk."""
     if not file_name:
         return None
@@ -89,6 +92,7 @@ def _download_task_file(task_id: str, file_name: str, base_url: str = DEFAULT_AP
     except (requests.exceptions.RequestException, OSError) as err:
         print(f"❌ Could not fetch {url}: {err}")
         return None
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Core runner
@@ -124,8 +128,7 @@ def run_and_submit_all(
 
     # 2️⃣  Fetch questions ----------------------------------------------------
     try:
-        resp = requests.get(
-            f"{DEFAULT_API_URL.rstrip('/')}/questions", timeout=15)
+        resp = requests.get(f"{DEFAULT_API_URL.rstrip('/')}/questions", timeout=15)
         resp.raise_for_status()
         questions: List[Dict[str, Any]] = resp.json()
         if not questions:
@@ -143,11 +146,18 @@ def run_and_submit_all(
     # No tqdm – simple loop --------------------------------------------------
     for idx, q in enumerate(questions, 1):
         if stop_dict.get("stop"):
-            yield "🛑 Run cancelled by user (before finishing).", _mk_df(results_log), None
+            yield (
+                "🛑 Run cancelled by user (before finishing).",
+                _mk_df(results_log),
+                None,
+            )
             return
 
-        task_id, question_text, file_name = q.get(
-            "task_id"), q.get("question"), q.get("file_name")
+        task_id, question_text, file_name = (
+            q.get("task_id"),
+            q.get("question"),
+            q.get("file_name"),
+        )
         if not task_id or question_text is None:
             answered = "⚠️ malformed question payload"
         else:
@@ -157,10 +167,14 @@ def run_and_submit_all(
             except Exception as exc:
                 answered = f"AGENT ERROR: {exc}"
 
-        answers_payload.append(
-            {"task_id": task_id, "submitted_answer": answered})
+        answers_payload.append({"task_id": task_id, "submitted_answer": answered})
         results_log.append(
-            {"Task ID": task_id, "Question": question_text, "Submitted Answer": answered})
+            {
+                "Task ID": task_id,
+                "Question": question_text,
+                "Submitted Answer": answered,
+            }
+        )
         yield f"### ✅ {idx}/{total_q} answered", _mk_df(results_log), None
 
     # 3️⃣  Save locally -------------------------------------------------------
@@ -168,14 +182,22 @@ def run_and_submit_all(
     yield "### 📥 Answers saved locally.", _mk_df(results_log), answers_file
 
     if stop_dict.get("stop"):
-        yield "🛑 Run cancelled – answers saved locally, submission skipped.", _mk_df(results_log), answers_file
+        yield (
+            "🛑 Run cancelled – answers saved locally, submission skipped.",
+            _mk_df(results_log),
+            answers_file,
+        )
         return
 
     yield "### 📤 Submitting answers …", _mk_df(results_log), answers_file
 
     # 4️⃣  Build submission payload per spec ---------------------------------
     space_id = os.getenv("SPACE_ID", FALLBACK_SPACE_ID)
-    agent_code_url = f"https://huggingface.co/spaces/{space_id}/tree/main" if space_id else "<local-run>"
+    agent_code_url = (
+        f"https://huggingface.co/spaces/{space_id}/tree/main"
+        if space_id
+        else "<local-run>"
+    )
 
     submission = {
         "username": username,
@@ -189,10 +211,10 @@ def run_and_submit_all(
         resp.raise_for_status()
         data = resp.json()
         status_msg = (
-            "### 🎉 Submission successful\n" +
-            f"Score: **{data.get('score', 'N/A')}%** "
-            f"({data.get('correct_count', '?')}/{data.get('total_attempted', '?')})\n\n" +
-            f"{data.get('message', '')}"
+            "### 🎉 Submission successful\n"
+            + f"Score: **{data.get('score', 'N/A')}%** "
+            f"({data.get('correct_count', '?')}/{data.get('total_attempted', '?')})\n\n"
+            + f"{data.get('message', '')}"
         )
         yield status_msg, _mk_df(results_log), answers_file
     except requests.exceptions.HTTPError as e:
@@ -204,11 +226,19 @@ def run_and_submit_all(
             detail += f" Response: {e.response.text[:500]}"
         yield f"❌ Submission failed: {detail}", _mk_df(results_log), answers_file
     except requests.exceptions.Timeout:
-        yield "❌ Submission failed: request timed‑out.", _mk_df(results_log), answers_file
+        yield (
+            "❌ Submission failed: request timed‑out.",
+            _mk_df(results_log),
+            answers_file,
+        )
     except requests.exceptions.RequestException as e:
-        yield f"❌ Submission failed: network error – {e}", _mk_df(results_log), answers_file
+        yield (
+            f"❌ Submission failed: network error – {e}",
+            _mk_df(results_log),
+            answers_file,
+        )
     except Exception as e:
-        yield f"❌ Unexpected submission error: {e}", _mk_df(results_log), answers
+        yield f"❌ Unexpected submission error: {e}", _mk_df(results_log)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -232,13 +262,15 @@ with demo:
     stop_state = gr.State({"stop": False})
 
     with gr.Row():
-        run_btn = gr.Button(
-            "Run Evaluation & Submit All Answers", variant="primary")
+        run_btn = gr.Button("Run Evaluation & Submit All Answers", variant="primary")
         stop_btn = gr.Button("Stop", elem_id="stop_button")
 
     status_box = gr.Markdown("Waiting …", elem_id="status_box")
-    table = gr.DataFrame(headers=[
-                         "Task ID", "Question", "Submitted Answer"], interactive=False, elem_id="answers_table")
+    table = gr.DataFrame(
+        headers=["Task ID", "Question", "Submitted Answer"],
+        interactive=False,
+        elem_id="answers_table",
+    )
     dl_file = gr.File(label="Download answers JSON", interactive=False)
 
     # Event listener for the long-running generator – returns a Dependency obj
@@ -260,7 +292,7 @@ with demo:
     )
 
 if __name__ == "__main__":
-    print("\n" + "-"*30 + " App Starting " + "-"*30)
+    print("\n" + "-" * 30 + " App Starting " + "-" * 30)
     print("Launching Gradio Interface for Basic Agent Evaluation…")
     # Enable queuing globally so the progress bar and async events work
     demo.queue()

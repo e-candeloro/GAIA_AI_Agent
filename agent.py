@@ -1,4 +1,3 @@
-# --------------------------- agent.py (cleaned) ------------------------------
 import os
 import json
 from pathlib import Path
@@ -37,15 +36,14 @@ def build_graph():
     load_dotenv()
 
     base_prompt = PromptTemplate(
-        template=Path(__file__).with_name(
-            "base_prompt.txt").read_text("utf-8"),
+        template=Path(__file__).with_name("base_prompt.txt").read_text("utf-8"),
         input_variables=["tools", "file_info"],
     )
 
     TOOLS = get_tools()
 
     llm = ChatGroq(
-        model="qwen/qwen3-32b",              # valid Groq model id # was llama3-8b-8192
+        model="qwen/qwen3-32b",  # valid Groq model id # was llama3-8b-8192
         temperature=0,
         api_key=os.getenv("GROQ_API_KEY"),
     )
@@ -63,8 +61,8 @@ def build_graph():
         file_info = (
             f"You have also received an input file at `{state['input_file']}`. "
             "Use an appropriate tool to read or analyse it."
-            if state.get("input_file") else
-            "No input file has been provided for this question."
+            if state.get("input_file")
+            else "No input file has been provided for this question."
         )
 
         sys_msg = SystemMessage(
@@ -99,5 +97,13 @@ if __name__ == "__main__":
     load_dotenv()
     graph = build_graph()
     out = graph.invoke(
-        {"messages": [HumanMessage(content="Search the surname of the equine veterinarian mentioned in 1.E Exercises from the chemistry materials licensed by Marisa Alviar-Agnew & Henry Agnew under the CK-12 license in LibreText's Introductory Chemistry materials as compiled 08/21/2023?")], "input_file": ""})
+        {
+            "messages": [
+                HumanMessage(
+                    content="Search the surname of the equine veterinarian mentioned in 1.E Exercises from the chemistry materials licensed by Marisa Alviar-Agnew & Henry Agnew under the CK-12 license in LibreText's Introductory Chemistry materials as compiled 08/21/2023?"
+                )
+            ],
+            "input_file": "",
+        }
+    )
     print(out["messages"][-1].content)
