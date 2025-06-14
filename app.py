@@ -1,7 +1,7 @@
 import os
 import time
 import json
-from typing import Generator, List, Dict, Any, Optional
+from typing import Generator, List, Dict, Any, Optional, Tuple
 
 import gradio as gr
 import pandas as pd
@@ -18,10 +18,9 @@ load_dotenv()
 # Constants
 # ─────────────────────────────────────────────────────────────────────────────
 DEFAULT_API_URL = "https://agents-course-unit4-scoring.hf.space"
-FALLBACK_SPACE_ID = "ecandeloro/hf_agent_gaia_30"  # change if you fork
+FALLBACK_SPACE_ID = "ecandeloro/hf_agent_gaia_30"
 
-# temp directories setup
-TEMP_DIR = os.getenv("TEMP_DIR", "/tmp")  # Default temp directory
+TEMP_DIR = os.getenv("TEMP_DIR", "/tmp")
 QUESTIONS_FILES_DIR = os.path.join(TEMP_DIR, "questions_files")
 OUTPUT_GAIA_DIR = os.path.join(TEMP_DIR, "output_gaia")
 
@@ -29,16 +28,12 @@ os.makedirs(TEMP_DIR, exist_ok=True)
 os.makedirs(QUESTIONS_FILES_DIR, exist_ok=True)
 os.makedirs(OUTPUT_GAIA_DIR, exist_ok=True)
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Agent wrapper
 # ─────────────────────────────────────────────────────────────────────────────
 
 
 class BasicAgent:
-    """Shim around the langgraph returned by `build_graph()` that
-    extracts only what follows the `[FINAL ANSWER]` tag."""
-
     TAG = "[FINAL ANSWER]"
 
     def __init__(self) -> None:
@@ -46,25 +41,19 @@ class BasicAgent:
         self.graph = build_graph()
         print("✅  BasicAgent ready!")
 
-    def __call__(self,
-                 question: str,
-                 input_file: Optional[str] = None) -> str:
-        """Run the graph and return just the text after `[FINAL ANSWER]`."""
+    def __call__(self, question: str, input_file: Optional[str] = None) -> str:
         msgs = [HumanMessage(content=question)]
-        out = self.graph.invoke({"messages": msgs,
-                                 "input_file": input_file})
+        out = self.graph.invoke({"messages": msgs, "input_file": input_file})
         raw = out["messages"][-1].content
-
         idx = raw.rfind(self.TAG)
         return raw[idx + len(self.TAG):].strip() if idx != -1 else raw.strip()
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def _mk_df(rows: List[Dict[str, Any]]) -> pd.DataFrame:
-    """Return a DataFrame even if *rows* is empty."""
     return pd.DataFrame(rows)
 
 
@@ -77,34 +66,23 @@ def _dump_answers(payload: List[Dict[str, str]]) -> str:
     return fname
 
 
-def _download_task_file(
-    task_id: str,
-    file_name: str,
-    base_url: str = DEFAULT_API_URL,
-    timeout: int = 30,
-) -> Optional[str]:
-    """
-        Try to download /files/{task_id} → tmp/<file_name>.
-        Returns '' on any failure instead of raising.
-        """
+def _download_task_file(task_id: str, file_name: str, base_url: str = DEFAULT_API_URL, timeout: int = 30) -> Optional[str]:
     safe_name = os.path.basename(file_name) or f"{task_id}.bin"
     dest_path = os.path.join(QUESTIONS_FILES_DIR, safe_name)
     url = f"{base_url.rstrip('/')}/files/{task_id}"
-
     try:
         resp = requests.get(url, timeout=timeout)
-        resp.raise_for_status()                        # 4xx / 5xx → HTTPError
-        with open(dest_path, "wb") as fh:              # disk I/O may fail
+        resp.raise_for_status()
+        with open(dest_path, "wb") as fh:
             fh.write(resp.content)
         print(f"✅ Downloaded {url} → {dest_path}")
         return dest_path
-
     except (requests.exceptions.RequestException, OSError) as err:
         print(f"Could not fetch {url} -> {dest_path}: {err}")
-        return None                                    # empty path signals failure
+        return None
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Core runner (streaming generator)
+# Core runner
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -112,7 +90,7 @@ def run_and_submit_all(
     profile: gr.OAuthProfile | None,
     stop_dict: dict,
     progress: gr.Progress = gr.Progress(track_tqdm=False),
-) -> Generator[tuple[str, pd.DataFrame, Optional[str], float], None]:
+) -> Generator[Tuple[str, pd.DataFrame, Optional[str]], None, None]:
 
     stop_dict["stop"] = False
 
@@ -176,13 +154,11 @@ def run_and_submit_all(
         return
 
     yield "### 💾 Answers saved – preparing submission …", _mk_df(results_log), answers_file
-    # (submission code unchanged, but each subsequent yield must include `1.0`)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Gradio UI
 # ─────────────────────────────────────────────────────────────────────────────
-
-
 CSS = """
 #status_box {font-size:1.5rem; line-height:1.4; white-space:pre-line;}
 #stop_button {background-color:#d9534f !important; color:white !important;}
@@ -193,7 +169,7 @@ demo = gr.Blocks(title="Agent Evaluation – Streaming Edition", css=CSS)
 
 with demo:
     gr.Markdown("""# 🏃‍♂️ Live Agent Evaluation
-    Watch answers stream in real‑time. Hit **Stop** to abort and download your
+    Watch answers stream in real-time. Hit **Stop** to abort and download your
     work-in-progress JSON.
     """)
 
@@ -206,7 +182,6 @@ with demo:
         stop_btn = gr.Button("Stop", elem_id="stop_button")
 
     status_box = gr.Markdown("Waiting …", elem_id="status_box")
-    progress_bar = gr.Progress(track_tqdm=True)
     table = gr.DataFrame(elem_id="answers_table", interactive=False)
     dl_file = gr.File(label="Download answers JSON", interactive=False)
 
@@ -218,26 +193,23 @@ with demo:
 
 if __name__ == "__main__":
     print("\n" + "-"*30 + " App Starting " + "-"*30)
-    # Check for SPACE_HOST and SPACE_ID at startup for information
-    space_host_startup = os.getenv("SPACE_HOST")
-    space_id_startup = os.getenv("SPACE_ID")  # Get SPACE_ID at startup
+    space_host = os.getenv("SPACE_HOST")
+    space_id = os.getenv("SPACE_ID")
 
-    if space_host_startup:
-        print(f"✅ SPACE_HOST found: {space_host_startup}")
-        print(
-            f"   Runtime URL should be: https://{space_host_startup}.hf.space")
+    if space_host:
+        print(f"✅ SPACE_HOST found: {space_host}")
+        print(f"   Runtime URL should be: https://{space_host}.hf.space")
     else:
         print("ℹ️  SPACE_HOST environment variable not found (running locally?).")
 
-    if space_id_startup:  # Print repo URLs if SPACE_ID is found
-        print(f"✅ SPACE_ID found: {space_id_startup}")
-        print(f"   Repo URL: https://huggingface.co/spaces/{space_id_startup}")
+    if space_id:
+        print(f"✅ SPACE_ID found: {space_id}")
+        print(f"   Repo URL: https://huggingface.co/spaces/{space_id}")
         print(
-            f"   Repo Tree URL: https://huggingface.co/spaces/{space_id_startup}/tree/main")
+            f"   Repo Tree URL: https://huggingface.co/spaces/{space_id}/tree/main")
     else:
         print("ℹ️  SPACE_ID environment variable not found (running locally?). Repo URL cannot be determined.")
 
     print("-"*(60 + len(" App Starting ")) + "\n")
-
     print("Launching Gradio Interface for Basic Agent Evaluation...")
     demo.launch(debug=True, share=False)

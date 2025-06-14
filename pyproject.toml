@@ -10,6 +10,7 @@ dependencies = [
     "crawl4ai>=0.6.3",
     "duckduckgo-search>=8.0.2",
     "gradio[oauth]>=5.34.0",
+    "groq>=0.28.0",
     "huggingface-hub>=0.33.0",
     "ipykernel>=6.29.5",
     "jupyter>=1.1.1",
