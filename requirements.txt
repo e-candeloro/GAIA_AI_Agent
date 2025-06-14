@@ -158,6 +158,9 @@ audioop-lts==0.2.1 ; python_full_version >= '3.13' \
     --hash=sha256:fbae5d6925d7c26e712f0beda5ed69ebb40e14212c185d129b8dfbfcc335eb48 \
     --hash=sha256:fd1345ae99e17e6910f47ce7d52673c6a1a70820d78b67de1b7abb3af29c426a \
     --hash=sha256:ff3f97b3372c97782e9c6d3d7fdbe83bce8f70de719605bd7ee1839cd1ab360a
+authlib==1.6.0 \
+    --hash=sha256:4367d32031b7af175ad3a323d571dc7257b7099d55978087ceae4a0d88cd3210 \
+    --hash=sha256:91685589498f79e8655e8a8947431ad6288831d643f11c55c2143ffcc738048d
 babel==2.17.0 \
     --hash=sha256:0c54cffb19f690cdcc52a3b50bcbf71e07a808d1c80d549f2459b9d2cf0afb9d \
     --hash=sha256:4d0b53093fdfb4b21c92b5213dba5a1b23885afa8383709427046b21c366e5f2
@@ -628,6 +631,9 @@ greenlet==3.2.3 \
 groovy==0.1.2 \
     --hash=sha256:25c1dc09b3f9d7e292458aa762c6beb96ea037071bf5e917fc81fb78d2231083 \
     --hash=sha256:7f7975bab18c729a257a8b1ae9dcd70b7cafb1720481beae47719af57c35fa64
+groq==0.28.0 \
+    --hash=sha256:65e1cab9184cbb32380d62eca50d6162269c7ec0c77e4cc868069cfe93450f9f \
+    --hash=sha256:c6f86638371c2cba2ca337232e76c8d412e75965ed7e3058d30c9aa5dfe84303
 grpcio==1.73.0 \
     --hash=sha256:068ecc415f79408d57a7f146f54cdf9f0acb4b301a52a9e563973dc981e82f3d \
     --hash=sha256:072d8154b8f74300ed362c01d54af8b93200c1a9077aeaea79828d48598514f1 \
@@ -727,6 +733,9 @@ ipywidgets==8.1.7 \
 isoduration==20.11.0 \
     --hash=sha256:ac2f9015137935279eac671f94f89eb00584f940f5dc49462a0c4ee692ba1bd9 \
     --hash=sha256:b2904c2a4228c3d44f409c8ae8e2370eb21a26f7ac2ec5446df141dde3452042
+itsdangerous==2.2.0 \
+    --hash=sha256:c6242fc49e35958c8b15141343aa660db5fc54d4f13a1db01a3f5891b98700ef \
+    --hash=sha256:e0050c0b7da1eea53ffaf149c0cfbb5c6e2e2b69c4bef22c81fa6eb73e5f6173
 jedi==0.19.2 \
     --hash=sha256:4770dc3de41bde3966b02eb84fbcf557fb33cce26ad23da12c742fb50ecb11f0 \
     --hash=sha256:a8ef22bde8490f57fe5c7681a3c83cb58874daf72b4784de3cce5b6ef6edb5b9
@@ -868,6 +877,9 @@ langchain-core==0.3.65 \
 langchain-google-genai==2.1.5 \
     --hash=sha256:6c8ccaf33a41f83b1d08a2398edbf47a1eebea27a7ec6930f34a0c019f309253 \
     --hash=sha256:6e71375a7707667bdecc5a7d1c86438ec10f2c7bb6dc6e3f095f5b22523c4fc9
+langchain-groq==0.3.2 \
+    --hash=sha256:033f459d4c0515e22a6e64f5a402e366933a6c827fd5915547419cb62fd7b34a \
+    --hash=sha256:bc111dea17a3510498c4697c42bf97e629bcf8f00b97fa25e51ea7947fc0b540
 langchain-huggingface==0.3.0 \
     --hash=sha256:aab85d57e649c805d2f2a9f8d72d87b5d12c45dd4831309ac9c37753ddb237ed \
     --hash=sha256:d1cf93fb4d4eafc8b44edcd5fba904b27cbd3fda6cdef0e2321fbcf4efcda822

@@ -8,6 +8,7 @@ from langchain_core.documents import Document
 from langchain_core.messages import AnyMessage, HumanMessage, SystemMessage
 from langchain_core.tools import tool
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_groq import ChatGroq
 # from langchain_google_genai import ChatGoogleGenerativeAI
 # from langchain_groq import ChatGroq
 from langchain_huggingface import (ChatHuggingFace, HuggingFaceEmbeddings,
@@ -84,11 +85,11 @@ def build_graph():
     """
 
     load_dotenv()
-    GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-
     # setup llm and tools
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash-preview-05-20", google_api_key=GOOGLE_API_KEY)
+    # llm = ChatGoogleGenerativeAI(
+    #     model="gemini-2.5-flash-preview-05-20", google_api_key=os.getenv("GOOGLE_API_KEY"))
+    llm = ChatGroq(model="qwen-qwq-32b", temperature=0,
+                   api_key=os.getenv("GROQ_API_KEY"))
     tools = get_tools()
     llm_with_tools = llm.bind_tools(tools)
 
