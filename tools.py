@@ -351,7 +351,7 @@ _MD = MarkItDown(enable_plugins=False,
 def read_document(file_path: str, max_pages: Optional[int] = 10) -> str:
     """
     Extract plain text from **any** local document supported by MarkItDown
-    (PDF, DOCX, PPTX, XLSX, images, HTML, etc.).
+    (PDF, DOCX, PPTX, XLSX, images, HTML,.py, etc.).
 
     Parameters
     ----------
@@ -619,6 +619,7 @@ tools = [
     # extract_text_from_image,
     analyze_csv_file,
     analyze_excel_file,
+    read_document,
     # analyze_image,
     # transform_image,
     # draw_on_image,

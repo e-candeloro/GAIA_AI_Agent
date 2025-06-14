@@ -97,5 +97,5 @@ if __name__ == "__main__":
     load_dotenv()
     graph = build_graph()
     out = graph.invoke(
-        {"messages": [HumanMessage(content="Read the document at /home/ettore/projects/personal/agents/hf_agent_gaia_30/tools.py and summarize it")], "input_file": ""})
+        {"messages": [HumanMessage(content="Give me the name of the image subject. The image is in the file")], "input_file": "./notebooks/tmp/questions_files/Cat_August_2010-4.jpg"})
     print(out["messages"][-1].content)
