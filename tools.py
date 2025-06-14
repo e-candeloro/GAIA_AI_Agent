@@ -1,10 +1,13 @@
+import ast
 import base64
 import cmath
 import json
 import math
+import operator as op
 import os
 import re
 import tempfile
+import time
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
@@ -16,24 +19,30 @@ import pytesseract
 import requests
 import trafilatura
 from bs4 import BeautifulSoup
+from crawl4ai import AsyncWebCrawler
 from dotenv import load_dotenv
 from duckduckgo_search import DDGS
 from groq import Groq
 from langchain.agents import tool
 from langchain_community.document_loaders import ArxivLoader, WikipediaLoader
-from langchain_community.tools.tavily_search import TavilySearchResults
+from langchain_community.tools.tavily_search import \
+    TavilySearchResults  # replaces Serper
 from langchain_community.utilities import GoogleSerperAPIWrapper
 from langchain_core.documents import Document
-from langchain_core.messages.ai import AIMessage
 from langchain_core.tools import tool
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_groq import ChatGroq
-from langchain_huggingface import (ChatHuggingFace, HuggingFaceEmbeddings,
-                                   HuggingFaceEndpoint)
-from langgraph.graph import START, MessagesState, StateGraph
-from langgraph.prebuilt import ToolNode, tools_condition
 from markitdown import MarkItDown
-from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
+
+# from langchain_core.messages.ai import AIMessage
+# from langchain_core.tools import AsyncTool  # for async wrapper
+
+# from langchain_google_genai import ChatGoogleGenerativeAI
+# from langchain_groq import ChatGroq
+# from langchain_huggingface import (ChatHuggingFace, HuggingFaceEmbeddings,
+#                                    HuggingFaceEndpoint)
+# from langgraph.graph import START, MessagesState, StateGraph
+# from langgraph.prebuilt import ToolNode, tools_condition
+# from markitdown import MarkItDown
+# from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 
 load_dotenv()
 ### =============== MATHEMATICAL TOOLS =============== ###
@@ -199,46 +208,80 @@ def wiki_search(query: str) -> str:
 ######################################################################
 # Public API                                                         #
 ######################################################################
+# @tool
+# def web_search(query: str, max_results: int = 3) -> str:
+#     # docstring
+#     """
+#     Return up to `max_results` Google search results for *query*.
+#     The output is formatted by `_format_docs`, so it matches the schema your
+#     other tools already use.
+#     """
+
+#     docs: List[Document] = []
+
+#     try:
+#         wrapper = GoogleSerperAPIWrapper(k=max_results)
+#         result_json = wrapper.results(query)
+
+#         # Primary path — structured organic hits
+#         for hit in result_json.get("organic", [])[:max_results]:
+#             docs.append(
+#                 Document(
+#                     page_content=hit.get("snippet", ""),
+#                     metadata={"source": hit.get("link"), "page": ""},
+#                 )
+#             )
+
+#         # Fallback — single‑string answer if no organic results
+#         if not docs:
+#             answer = wrapper.run(query)
+#             docs.append(
+#                 Document(
+#                     page_content=answer,
+#                     metadata={"source": "serper", "page": ""},
+#                 )
+#             )
+#     except Exception:
+#         # Total failure → return empty formatted structure
+#         pass
+
+#     return _format_docs(docs[:max_results])
+
+
 @tool
-def web_search(query: str, max_results: int = 3) -> str:
-    # docstring
+def web_search(query: str, max_results: int = 5) -> str:
     """
-    Return up to `max_results` Google search results for *query*.
-    The output is formatted by `_format_docs`, so it matches the schema your
-    other tools already use.
+    Web search powered by Tavily.
+    Requires `TAVILY_API_KEY` in env. 
+    Returns up to `max_results` results formatted with `_format_docs`.
     """
-
-    docs: List[Document] = []
-
+    docs: list[Document] = []
     try:
-        wrapper = GoogleSerperAPIWrapper(k=max_results)
-        result_json = wrapper.results(query)
-
-        # Primary path — structured organic hits
-        for hit in result_json.get("organic", [])[:max_results]:
+        tavily = TavilySearchResults(k=max_results)
+        hits = tavily.run(query)                      # -> list[dict]
+        for hit in hits:
             docs.append(
                 Document(
                     page_content=hit.get("snippet", ""),
-                    metadata={"source": hit.get("link"), "page": ""},
+                    metadata={"source": hit.get("url"), "page": ""},
                 )
             )
-
-        # Fallback — single‑string answer if no organic results
-        if not docs:
-            answer = wrapper.run(query)
-            docs.append(
-                Document(
-                    page_content=answer,
-                    metadata={"source": "serper", "page": ""},
-                )
+    except Exception as exc:
+        docs.append(
+            Document(
+                page_content=f"[web_search error] {exc}",
+                metadata={"source": "tavily", "page": ""},
             )
-    except Exception:
-        # Total failure → return empty formatted structure
-        pass
-
-    return _format_docs(docs[:max_results])
+        )
+    return _format_docs(docs)
 
 
+@tool("crawl_page")
+async def crawl_page(url: str) -> str:
+    "Return Markdown of the given URL using Crawl4AI."
+    async with AsyncWebCrawler() as crawler:
+        res = await crawler.arun(url=url)
+        return res.markdown
 # @tool
 # def web_search(query: str, max_results: int = 3) -> str:
 #     """
@@ -308,79 +351,8 @@ def list_webpage_links(url: str, same_domain_only: bool = False) -> list[str]:
 
     return sorted(links)
 
-
-# ---------- 2. Browse → cleaned article text ----------------
-@tool
-def extract_webpage_text(url: str) -> str:
-    """
-    Download `url` and return the main readable text (no html, ads, nav bars).
-    Relies on trafilatura’s article extractor.
-    """
-    raw = trafilatura.fetch_url(url)
-    if raw is None:
-        return "🛑 Could not fetch the page."
-
-    text = trafilatura.extract(
-        raw,
-        include_comments=False,
-        include_tables=False,
-        include_links=False,
-    )
-    return text or "🛑 Page fetched but no readable text found."
-
-
-@tool
-def search_links_for_match(
-    url: str,
-    keyword: str,
-    max_links: int = 100,
-    same_domain_only: bool = True,
-    case_sensitive: bool = False,
-) -> list[str]:
-    """
-    Search the content of up to `max_links` found on a webpage, and return URLs that contain the given keyword.
-
-    Parameters:
-    ----------
-    url : str
-        The starting webpage to extract links from.
-    keyword : str
-        The keyword or phrase to match inside linked pages.
-    max_links : int, optional
-        Number of links to follow (default: 10).
-    same_domain_only : bool, optional
-        Only consider links from the same domain (default: True).
-    case_sensitive : bool, optional
-        Whether the keyword match should be case-sensitive.
-
-    Returns:
-    -------
-    list[str]
-        List of URLs whose content contains the keyword.
-    """
-
-    # Use the tool's .func() to access base function
-    all_links = list_webpage_links.func(
-        url=url, same_domain_only=same_domain_only)
-    matched_links = []
-
-    # Normalize keyword
-    kw = keyword if case_sensitive else keyword.lower()
-
-    for link in all_links[:max_links]:
-        try:
-            text = browse_webpage_link.func(link)
-            if not case_sensitive:
-                text = text.lower()
-            if kw in text:
-                matched_links.append(link)
-        except Exception:
-            continue
-
-    return matched_links or ["No matches found."]
-
-
 ### =============== DOCUMENT PROCESSING TOOLS =============== ###
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # MarkItDown initialisation
@@ -653,39 +625,18 @@ def transcribe_audio(audio_path: str) -> str:
 
 
 tools = [
-    calculator,
-    wiki_search,
-    web_search,
-    arxiv_search,
-    list_webpage_links,
-    extract_webpage_text,
-    search_links_for_match,
-    save_and_read_file,
-    download_file_from_url,
-    # extract_text_from_image,
-    analyze_csv_file,
-    analyze_excel_file,
-    read_document,
-    # analyze_image,
-    # transform_image,
-    # draw_on_image,
-    # generate_simple_image,
-    # combine_images,
-    multiply,
-    add,
-    subtract,
-    divide,
-    modulus,
-    power,
-    square_root,
-    describe_image,
-    transcribe_audio
+    # math & utils
+    calculator, multiply, add, subtract, divide, modulus, power, square_root,
+    # retrieval
+    wiki_search, web_search, arxiv_search, list_webpage_links,
+    # file IO
+    save_and_read_file, download_file_from_url, read_document,
+    analyze_csv_file, analyze_excel_file,
+    # vision / audio
+    describe_image, transcribe_audio,
 ]
 
 
 def get_tools() -> list:
-    """
-    Return the list of tools available for the agent.
-    This can be used to dynamically load tools in the agent.
-    """
+    """Return the curated list of LangChain tools."""
     return tools

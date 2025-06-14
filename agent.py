@@ -20,7 +20,9 @@ from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
 
 from tools import get_tools
+from langchain.globals import set_verbose
 
+set_verbose(True)
 
 # ---------------------- helpers ------------------------------------------------
 ENCODING = tiktoken.get_encoding("cl100k_base")
@@ -97,5 +99,5 @@ if __name__ == "__main__":
     load_dotenv()
     graph = build_graph()
     out = graph.invoke(
-        {"messages": [HumanMessage(content="What happened ")], "input_file": ""})
+        {"messages": [HumanMessage(content="Search the surname of the equine veterinarian mentioned in 1.E Exercises from the chemistry materials licensed by Marisa Alviar-Agnew & Henry Agnew under the CK-12 license in LibreText's Introductory Chemistry materials as compiled 08/21/2023?")], "input_file": ""})
     print(out["messages"][-1].content)
