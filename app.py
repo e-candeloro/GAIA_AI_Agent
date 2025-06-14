@@ -1,230 +1,205 @@
-import inspect
 import os
+import time
+import json
+from typing import Generator, List, Dict, Any
 
 import gradio as gr
 import pandas as pd
 import requests
 from dotenv import load_dotenv
+from tqdm.auto import tqdm
 from langchain_core.messages import HumanMessage
 
 from agent import build_graph
 
 load_dotenv()
 
-# (Keep Constants as is)
-# --- Constants ---
+# --- Constants ---------------------------------------------------------------
 DEFAULT_API_URL = "https://agents-course-unit4-scoring.hf.space"
+# fallback space ID for local runs, CHANGE THIS TO YOUR OWN SPACE ID IF NEEDED
+FALLBACK_SPACE_ID = "ecandeloro/hf_agent_gaia_30"
 
-# --- Basic Agent Definition ---
+
+# -----------------------------------------------------------------------------
+# Agent wrapper ----------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
 
 class BasicAgent:
-    """A langgraph agent."""
+    """Thin convenience wrapper around the langgraph returned by build_graph."""
 
-    def __init__(self):
-        print("BasicAgent initialized.")
+    def __init__(self) -> None:
+        print("⏳  Initialising BasicAgent …")
         self.graph = build_graph()
+        print("✅  BasicAgent ready!")
 
     def __call__(self, question: str) -> str:
-        print(
-            f"Agent received question (first 50 chars): {question[:50]}...")
-        # Wrap the question in a HumanMessage from langchain_core
+        print(f"⚙️   Processing: {question[:60]}…")
         messages = [HumanMessage(content=question)]
-        messages = self.graph.invoke({"messages": messages})
-        answer = messages['messages'][-1].content
+        chain_out = self.graph.invoke({"messages": messages})
+        answer: str = chain_out["messages"][-1].content
 
-        # If the answer does not contain [ANSWER], check if it starts with [ANSWER]
-        if answer.startswith("[FINAL ANSWER]"):
-            return answer[14:].strip()
-        else:
-            # If the answer does not start with [ANSWER], return the answer as is
-            # This is a fallback in case the agent does not follow the template
-            print(
-                "Warning: Answer does not start with [ANSWER]. Returning the answer as is.")
-            return answer.strip()
+        prefix = "[FINAL ANSWER]"
+        if answer.startswith(prefix):
+            answer = answer[len(prefix):]
+        return answer.strip()
 
 
-def run_and_submit_all(profile: gr.OAuthProfile | None):
+# -----------------------------------------------------------------------------
+# Core runner ------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+
+def _mk_df(rows: List[Dict[str, Any]]) -> pd.DataFrame:
+    """Helper that always returns a DataFrame (Gradio dislikes `None`)."""
+    return pd.DataFrame(rows, columns=["Task ID", "Question", "Submitted Answer"])
+
+
+def _dump_answers(answers_payload: List[Dict[str, str]]) -> str:
+    """Persist answers to a timestamped JSON file and return the path."""
+    ts = int(time.time())
+    fname = f"agent_answers_{ts}.json"
+    with open(fname, "w", encoding="utf-8") as fh:
+        json.dump(answers_payload, fh, ensure_ascii=False, indent=2)
+    return fname
+
+
+def run_and_submit_all(
+    profile: gr.OAuthProfile | None,
+    progress: gr.Progress = gr.Progress(track_tqdm=True),
+) -> Generator[tuple[str, pd.DataFrame, str | None], None, None]:
+    """Main orchestration.
+
+    Generates `(status_markdown, results_df, download_path)` tuples so the UI
+    can update live. `download_path` is `None` until the question‑answering loop
+    finishes, at which point it points to a JSON file containing all answers ‑
+    handy if submission fails.
     """
-    Fetches all questions, runs the BasicAgent on them, submits all answers,
-    and displays the results.
-    """
-    # --- Determine HF Space Runtime URL and Repo URL ---
-    # Get the SPACE_ID for sending link to the code
-    space_id = os.getenv("SPACE_ID")
 
-    if profile:
-        username = f"{profile.username}"
-        print(f"User logged in: {username}")
-    else:
-        print("User not logged in.")
-        return "Please Login to Hugging Face with the button.", None
+    # 0️⃣  Early exit if not logged‑in
+    if profile is None:
+        yield "🔒 Please log‑in with the HF button first.", _mk_df([]), None
+        return
 
-    api_url = DEFAULT_API_URL
-    questions_url = f"{api_url}/questions"
-    submit_url = f"{api_url}/submit"
+    username = profile.username
+    yield f"👋 Welcome **{username}** – starting …", _mk_df([]), None
 
-    # 1. Instantiate Agent ( modify this part to create your agent)
+    # 1️⃣  Instantiate agent ----------------------------------------------------
     try:
         agent = BasicAgent()
-    except Exception as e:
-        print(f"Error instantiating agent: {e}")
-        return f"Error initializing agent: {e}", None
-    # In the case of an app running as a hugging Face space, this link points toward your codebase ( usefull for others so please keep it public)
-    agent_code = f"https://huggingface.co/spaces/{space_id}/tree/main"
-    print(agent_code)
+    except Exception as exc:
+        yield f"❌ Failed to initialise agent: {exc}", _mk_df([]), None
+        return
 
-    # 2. Fetch Questions
-    print(f"Fetching questions from: {questions_url}")
+    # 2️⃣  Fetch questions ------------------------------------------------------
+    questions_url = f"{DEFAULT_API_URL}/questions"
     try:
-        response = requests.get(questions_url, timeout=15)
-        response.raise_for_status()
-        questions_data = response.json()
-        if not questions_data:
-            print("Fetched questions list is empty.")
-            return "Fetched questions list is empty or invalid format.", None
-        print(f"Fetched {len(questions_data)} questions.")
-    except requests.exceptions.RequestException as e:
-        print(f"Error fetching questions: {e}")
-        return f"Error fetching questions: {e}", None
-    except requests.exceptions.JSONDecodeError as e:
-        print(f"Error decoding JSON response from questions endpoint: {e}")
-        print(f"Response text: {response.text[:500]}")
-        return f"Error decoding server response for questions: {e}", None
-    except Exception as e:
-        print(f"An unexpected error occurred fetching questions: {e}")
-        return f"An unexpected error occurred fetching questions: {e}", None
+        resp = requests.get(questions_url, timeout=15)
+        resp.raise_for_status()
+        questions: List[Dict[str, Any]] = resp.json()
+        if not questions:
+            raise ValueError("question list is empty")
+    except Exception as exc:
+        yield f"❌ Could not fetch questions: {exc}", _mk_df([]), None
+        return
 
-    # 3. Run your Agent
-    results_log = []
-    answers_payload = []
-    print(f"Running agent on {len(questions_data)} questions...")
-    for item in questions_data:
-        task_id = item.get("task_id")
-        question_text = item.get("question")
-        if not task_id or question_text is None:
-            print(f"Skipping item with missing task_id or question: {item}")
-            continue
-        try:
-            submitted_answer = agent(question_text)
-            answers_payload.append(
-                {"task_id": task_id, "submitted_answer": submitted_answer})
-            results_log.append(
-                {"Task ID": task_id, "Question": question_text, "Submitted Answer": submitted_answer})
-        except Exception as e:
-            print(f"Error running agent on task {task_id}: {e}")
-            results_log.append(
-                {"Task ID": task_id, "Question": question_text, "Submitted Answer": f"AGENT ERROR: {e}"})
+    total_q = len(questions)
+    yield f"📑 Fetched **{total_q}** questions.", _mk_df([]), None
 
+    # 3️⃣  Iterate questions ----------------------------------------------------
+    answers_payload: List[Dict[str, str]] = []
+    results_log: List[Dict[str, str]] = []
+
+    with tqdm(total=total_q, desc="Answering", unit="q", leave=False) as bar:
+        for idx, q in enumerate(questions, 1):
+            task_id, question_text = q.get("task_id"), q.get("question")
+            if not task_id or question_text is None:
+                answered = "⚠️ malformed question payload"
+            else:
+                try:
+                    answered = agent(question_text)
+                except Exception as exc:
+                    answered = f"AGENT ERROR: {exc}"
+
+            if task_id:
+                answers_payload.append(
+                    {"task_id": task_id, "submitted_answer": answered})
+
+            results_log.append(
+                {"Task ID": task_id or "?", "Question": question_text or "<missing>", "Submitted Answer": answered})
+            bar.update(1)
+            yield f"✅ Answered {idx}/{total_q}", _mk_df(results_log), None
+
+    # 4️⃣  Persist answers so they are never lost ------------------------------
+    answers_file = _dump_answers(answers_payload)
+    yield "💾 Answers saved locally – preparing submission …", _mk_df(results_log), answers_file
+
+    # 5️⃣  Submit ----------------------------------------------------------------
     if not answers_payload:
-        print("Agent did not produce any answers to submit.")
-        return "Agent did not produce any answers to submit.", pd.DataFrame(results_log)
+        yield "❌ No answers to submit.", _mk_df(results_log), answers_file
+        return
 
-    # 4. Prepare Submission
-    submission_data = {"username": username.strip(
-    ), "agent_code": agent_code, "answers": answers_payload}
-    status_update = f"Agent finished. Submitting {len(answers_payload)} answers for user '{username}'..."
-    print(status_update)
+    submit_url = f"{DEFAULT_API_URL}/submit"
+    # fallback when running locally
+    # fallback to a local run for this space. Change this to your own space ID!!!
+    space_id = os.getenv("SPACE_ID", FALLBACK_SPACE_ID)
+    agent_code_url = f"https://huggingface.co/spaces/{space_id}/tree/main" if space_id else "<local-run>"
 
-    # 5. Submit
-    print(f"Submitting {len(answers_payload)} answers to: {submit_url}")
+    submission = {"username": username,
+                  "agent_code": agent_code_url, "answers": answers_payload}
+
     try:
-        response = requests.post(submit_url, json=submission_data, timeout=60)
-        response.raise_for_status()
-        result_data = response.json()
-        final_status = (
-            f"Submission Successful!\n"
-            f"User: {result_data.get('username')}\n"
-            f"Overall Score: {result_data.get('score', 'N/A')}% "
-            f"({result_data.get('correct_count', '?')}/{result_data.get('total_attempted', '?')} correct)\n"
-            f"Message: {result_data.get('message', 'No message received.')}"
+        resp = requests.post(submit_url, json=submission, timeout=60)
+        resp.raise_for_status()
+        data = resp.json()
+        status_msg = (
+            "### 🎉 Submission successful\n" +
+            f"Score: **{data.get('score', 'N/A')}%** "
+            f"({data.get('correct_count', '?')}/{data.get('total_attempted', '?')})\n" +
+            f"Message: {data.get('message', '')}"
         )
-        print("Submission successful.")
-        results_df = pd.DataFrame(results_log)
-        return final_status, results_df
+        yield status_msg, _mk_df(results_log), answers_file
     except requests.exceptions.HTTPError as e:
-        error_detail = f"Server responded with status {e.response.status_code}."
+        detail = f"Server responded with status {e.response.status_code}."
         try:
-            error_json = e.response.json()
-            error_detail += f" Detail: {error_json.get('detail', e.response.text)}"
+            err_json = e.response.json()
+            detail += f" Detail: {err_json.get('detail', e.response.text)}"
         except requests.exceptions.JSONDecodeError:
-            error_detail += f" Response: {e.response.text[:500]}"
-        status_message = f"Submission Failed: {error_detail}"
-        print(status_message)
-        results_df = pd.DataFrame(results_log)
-        return status_message, results_df
+            detail += f" Response: {e.response.text[:500]}"
+        yield f"❌ Submission failed: {detail}", _mk_df(results_log), answers_file
     except requests.exceptions.Timeout:
-        status_message = "Submission Failed: The request timed out."
-        print(status_message)
-        results_df = pd.DataFrame(results_log)
-        return status_message, results_df
+        yield "❌ Submission failed: request timed‑out.", _mk_df(results_log), answers_file
     except requests.exceptions.RequestException as e:
-        status_message = f"Submission Failed: Network error - {e}"
-        print(status_message)
-        results_df = pd.DataFrame(results_log)
-        return status_message, results_df
+        yield f"❌ Submission failed: network error – {e}", _mk_df(results_log), answers_file
     except Exception as e:
-        status_message = f"An unexpected error occurred during submission: {e}"
-        print(status_message)
-        results_df = pd.DataFrame(results_log)
-        return status_message, results_df
+        yield f"❌ Unexpected submission error: {e}", _mk_df(results_log), answers_file
 
 
-# --- Build Gradio Interface using Blocks ---
-with gr.Blocks() as demo:
-    gr.Markdown("# Basic Agent Evaluation Runner")
-    gr.Markdown(
-        """
-        **Instructions:**
+# -----------------------------------------------------------------------------
+# Gradio UI --------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
-        1.  Please clone this space, then modify the code to define your agent's logic, the tools, the necessary packages, etc ...
-        2.  Log in to your Hugging Face account using the button below. This uses your HF username for submission.
-        3.  Click 'Run Evaluation & Submit All Answers' to fetch questions, run your agent, submit answers, and see the score.
-
-        ---
-        **Disclaimers:**
-        Once clicking on the "submit button, it can take quite some time ( this is the time for the agent to go through all the questions).
-        This space provides a basic setup and is intentionally sub-optimal to encourage you to develop your own, more robust solution. For instance for the delay process of the submit button, a solution could be to cache the answers and submit in a seperate action or even to answer the questions in async.
-        """
-    )
+demo = gr.Blocks(title="Agent Evaluation Runner – Streaming Edition")
+with demo:
+    gr.Markdown("""# 🏃‍♂️ Live Agent Evaluation
+    Answers are streamed one‑by‑one. A JSON copy of all answers is always
+    available for download so nothing is lost if submission fails.
+    """)
 
     gr.LoginButton()
 
-    run_button = gr.Button("Run Evaluation & Submit All Answers")
+    run_btn = gr.Button(
+        "Run Evaluation & Submit All Answers", variant="primary")
 
-    status_output = gr.Textbox(
-        label="Run Status / Submission Result", lines=5, interactive=False)
-    # Removed max_rows=10 from DataFrame constructor
-    results_table = gr.DataFrame(
-        label="Questions and Agent Answers", wrap=True)
+    status_box = gr.Markdown("Waiting …")
+    table = gr.DataFrame(
+        headers=["Task ID", "Question", "Submitted Answer"], interactive=False)
+    dl_file = gr.File(label="Download answers JSON", interactive=False)
 
-    run_button.click(
-        fn=run_and_submit_all,
-        outputs=[status_output, results_table]
+    run_btn.click(
+        run_and_submit_all,
+        inputs=[gr.OAuthProfile()],  # auto‑filled by LoginButton
+        outputs=[status_box, table, dl_file],
     )
 
 if __name__ == "__main__":
-    print("\n" + "-"*30 + " App Starting " + "-"*30)
-    # Check for SPACE_HOST and SPACE_ID at startup for information
-    space_host_startup = os.getenv("SPACE_HOST")
-    space_id_startup = os.getenv("SPACE_ID")  # Get SPACE_ID at startup
-
-    if space_host_startup:
-        print(f"✅ SPACE_HOST found: {space_host_startup}")
-        print(
-            f"   Runtime URL should be: https://{space_host_startup}.hf.space")
-    else:
-        print("ℹ️  SPACE_HOST environment variable not found (running locally?).")
-
-    if space_id_startup:  # Print repo URLs if SPACE_ID is found
-        print(f"✅ SPACE_ID found: {space_id_startup}")
-        print(f"   Repo URL: https://huggingface.co/spaces/{space_id_startup}")
-        print(
-            f"   Repo Tree URL: https://huggingface.co/spaces/{space_id_startup}/tree/main")
-    else:
-        print("ℹ️  SPACE_ID environment variable not found (running locally?). Repo URL cannot be determined.")
-
-    print("-"*(60 + len(" App Starting ")) + "\n")
-
-    print("Launching Gradio Interface for Basic Agent Evaluation...")
-    demo.launch(debug=True, share=False)
+    demo.launch()
