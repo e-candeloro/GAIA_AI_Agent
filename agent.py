@@ -74,7 +74,7 @@ Question: What is the capital of France?
 
 Output: [FINAL ANSWER] Paris
  
-I REPEAT: DON'T SAY ANYTHING ELSE THAN THE FINAL ANSWER in the format [FINAL ANSWER] *answer here*, and don't use any other format than the one specified above.
+I REPEAT: DON'T SAY ANYTHING ELSE, EVEN IF YOU THINK, THAN THE FINAL ANSWER in the format [FINAL ANSWER] *answer here*, and don't use any other format than the one specified above.
 """
 
 
@@ -97,6 +97,7 @@ def build_graph():
     class AgentState(TypedDict):
         """State for the agent."""
         # TODO: Add any additional state variables we need
+        input_file: Optional[str]  # Contains file path (various formats)
         messages: Annotated[list[AnyMessage], add_messages]
 
     # define the assistant node
