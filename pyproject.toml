@@ -22,7 +22,6 @@ dependencies = [
     "langchain-ollama>=0.3.3",
     "langchain-tavily>=0.2.2",
     "langgraph>=0.4.8",
-    "langmem>=0.0.27",
     "matplotlib>=3.10.3",
     "networkx>=3.4.2",
     "numpy>=2.2.6",
