@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import time
 from typing import Any, Dict, Generator, List, Optional, Tuple
 
@@ -9,7 +10,7 @@ import requests
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage
 
-from agent import build_graph
+from agent import build_graph, build_graph_with_react
 
 load_dotenv()
 
@@ -26,30 +27,44 @@ TEMP_DIR = os.getenv("TEMP_DIR", "./tmp")
 QUESTIONS_FILES_DIR = os.path.join(TEMP_DIR, "questions_files")
 OUTPUT_GAIA_DIR = os.path.join(TEMP_DIR, "output_gaia")
 
-os.makedirs(QUESTIONS_FILES_DIR, exist_ok=True)
-os.makedirs(OUTPUT_GAIA_DIR, exist_ok=True)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Agent wrapper
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-class BasicAgent:
+class GAIAAgent:
     """Thin convenience wrapper around the langgraph returned by build_graph."""
 
     TAG = "[FINAL ANSWER]"
 
-    def __init__(self) -> None:
-        print("⏳  Initialising BasicAgent …")
-        self.graph = build_graph()
-        print("✅  BasicAgent ready!")
+    def __init__(self, model: str = "qwen/qwen3-32b", use_react_agent: bool = False) -> None:
+        print("⏳  Initialising GAIA Agent …")
+        self.model = model
+        print(f"Using model: {self.model}")
+
+        # check for required environment variables
+
+        if not os.getenv("GROQ_API_KEY"):
+            raise ValueError(
+                "GROQ_API_KEY environment variable is not set. "
+                "Please set it to your Groq API key."
+            )
+
+        if not os.getenv("TAVILY_API_KEY"):
+            raise ValueError(
+                "TAVILY_API_KEY environment variable is not set. "
+                "Please set it to your Tavily API key."
+            )
+        self.graph = build_graph() if not use_react_agent else build_graph_with_react()
+        print("✅  GAIA Agent ready!")
 
     def __call__(self, question: str, input_file: Optional[str] = None) -> str:
         msgs = [HumanMessage(content=question)]
         out = self.graph.invoke({"messages": msgs, "input_file": input_file})
         raw = out["messages"][-1].content
         idx = raw.rfind(self.TAG)
-        return raw[idx + len(self.TAG) :].strip() if idx != -1 else raw.strip()
+        return raw[idx + len(self.TAG):].strip() if idx != -1 else raw.strip()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -94,6 +109,21 @@ def _download_task_file(
         return None
 
 
+def _reset_temp_dirs() -> None:
+    """Ensure temp directories exist and are clean."""
+    try:
+        if os.path.exists(TEMP_DIR):
+            shutil.rmtree(TEMP_DIR)
+            print(
+                f"🗑️ Removed temporary directory and its contents: {TEMP_DIR}")
+    except Exception as e:
+        print(f"❌ Failed to clean TEMP_DIR: {e}")
+
+    for subdir in [TEMP_DIR, QUESTIONS_FILES_DIR, OUTPUT_GAIA_DIR]:
+        try:
+            os.makedirs(subdir, exist_ok=True)
+        except Exception as e:
+            print(f"❌ Could not create {subdir}: {e}")
 # ─────────────────────────────────────────────────────────────────────────────
 # Core runner
 # ─────────────────────────────────────────────────────────────────────────────
@@ -108,12 +138,14 @@ def run_and_submit_all(
     Streams markdown status, a DataFrame log, and an optional path to the saved‑answers JSON.
     The tqdm bar was removed because it does not surface in the Gradio frontend.
     """
-
     stop_dict["stop"] = False
+
+    # Cleanup temporary files from previous runs ----------------------------------------
+    _reset_temp_dirs()
 
     # 0️⃣  Auth check ---------------------------------------------------------
     if profile is None:
-        yield "🔒 Please log‑in with the HF button first.", _mk_df([]), None
+        yield "### 🔒 Please log‑in with the HF button first.", _mk_df([]), None
         return
 
     username = profile.username or "anonymous"
@@ -121,14 +153,19 @@ def run_and_submit_all(
 
     # 1️⃣  Build agent --------------------------------------------------------
     try:
-        agent = BasicAgent()
+        # Fallback to a default model if not set as env var
+        agent = GAIAAgent(model=os.getenv(
+            "MODEL", "qwen/qwen3-32b"), use_react_agent=False)
+
+        yield "### ✅ Agent initialised successfully.", _mk_df([]), None
     except Exception as exc:
-        yield f"❌ Failed to initialise agent: {exc}", _mk_df([]), None
+        yield f"### ❌ Failed to initialise agent: {exc}", _mk_df([]), None
         return
 
     # 2️⃣  Fetch questions ----------------------------------------------------
     try:
-        resp = requests.get(f"{DEFAULT_API_URL.rstrip('/')}/questions", timeout=15)
+        resp = requests.get(
+            f"{DEFAULT_API_URL.rstrip('/')}/questions", timeout=15)
         resp.raise_for_status()
         questions: List[Dict[str, Any]] = resp.json()
         if not questions:
@@ -147,7 +184,7 @@ def run_and_submit_all(
     for idx, q in enumerate(questions, 1):
         if stop_dict.get("stop"):
             yield (
-                "🛑 Run cancelled by user (before finishing).",
+                "### 🛑 Run cancelled by user (before finishing).",
                 _mk_df(results_log),
                 None,
             )
@@ -167,7 +204,8 @@ def run_and_submit_all(
             except Exception as exc:
                 answered = f"AGENT ERROR: {exc}"
 
-        answers_payload.append({"task_id": task_id, "submitted_answer": answered})
+        answers_payload.append(
+            {"task_id": task_id, "submitted_answer": answered})
         results_log.append(
             {
                 "Task ID": task_id,
@@ -183,7 +221,7 @@ def run_and_submit_all(
 
     if stop_dict.get("stop"):
         yield (
-            "🛑 Run cancelled – answers saved locally, submission skipped.",
+            "### 🛑 Run cancelled – answers saved locally, submission skipped.",
             _mk_df(results_log),
             answers_file,
         )
@@ -211,10 +249,10 @@ def run_and_submit_all(
         resp.raise_for_status()
         data = resp.json()
         status_msg = (
-            "### 🎉 Submission successful\n"
-            + f"Score: **{data.get('score', 'N/A')}%** "
+            "# 🎉 Submission successful\n"
+            + f"## Score: **{data.get('score', 'N/A')}%** "
             f"({data.get('correct_count', '?')}/{data.get('total_attempted', '?')})\n\n"
-            + f"{data.get('message', '')}"
+            + f"## {data.get('message', '')}"
         )
         yield status_msg, _mk_df(results_log), answers_file
     except requests.exceptions.HTTPError as e:
@@ -224,21 +262,21 @@ def run_and_submit_all(
             detail += f" Detail: {err_json.get('detail', e.response.text)}"
         except requests.exceptions.JSONDecodeError:
             detail += f" Response: {e.response.text[:500]}"
-        yield f"❌ Submission failed: {detail}", _mk_df(results_log), answers_file
+        yield f"### ❌ Submission failed: {detail}", _mk_df(results_log), answers_file
     except requests.exceptions.Timeout:
         yield (
-            "❌ Submission failed: request timed‑out.",
+            "### ❌ Submission failed: request timed‑out.",
             _mk_df(results_log),
             answers_file,
         )
     except requests.exceptions.RequestException as e:
         yield (
-            f"❌ Submission failed: network error – {e}",
+            f"### ❌ Submission failed: network error – {e}",
             _mk_df(results_log),
             answers_file,
         )
     except Exception as e:
-        yield f"❌ Unexpected submission error: {e}", _mk_df(results_log)
+        yield f"### ❌ Unexpected submission error: {e}", _mk_df(results_log)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -253,16 +291,32 @@ CSS = """
 demo = gr.Blocks(title="Agent Evaluation – Streaming Edition", css=CSS)
 
 with demo:
-    gr.Markdown("""# 🏃‍♂️ Live Agent Evaluation
+    gr.Markdown("""
+    # 🏃‍♂️ Live Agent Evaluation
     Answers are streamed one‑by‑one. A JSON copy of all answers is always available
     for download so nothing is lost if submission fails.
+
+    ## How to use this app
+    1. Log in with your Hugging Face account (top right corner).
+    2. Click the **Run Evaluation & Submit All Answers** button.
+    3. Wait for the evaluation to complete. You can stop it at any time by clicking the **Stop** button.
+    4. Download the answers JSON file to keep a copy of your answers.
+    5. If the submission is successful, you will see your score and a message from the grader.
+    6. If the submission fails, you will see an error message and can still download the answers JSON file.
+
+    ## Installation on Hugging Face Spaces or Locally
+
+    1. Clone this space to your own account
+    2. Set the `GROQ_API_KEY` and the `TAVILY_API_KEY` environment variables. You need to sign up in Groq and Tavily to get their API keys. They also have free tiers.
+    3. If you want to run locally, set the `SPACE_ID` or the `FALLBACK_SPACE_ID` environment variable to your own space ID (e.g. `ecandeloro/hf_agent_gaia_30`).
     """)
 
     gr.LoginButton()
     stop_state = gr.State({"stop": False})
 
     with gr.Row():
-        run_btn = gr.Button("Run Evaluation & Submit All Answers", variant="primary")
+        run_btn = gr.Button(
+            "Run Evaluation & Submit All Answers", variant="primary")
         stop_btn = gr.Button("Stop", elem_id="stop_button")
 
     status_box = gr.Markdown("Waiting …", elem_id="status_box")

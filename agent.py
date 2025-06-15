@@ -1,3 +1,4 @@
+from langgraph.prebuilt import create_react_agent
 import os
 from pathlib import Path
 from typing import Annotated, Optional, TypedDict, List
@@ -28,7 +29,7 @@ def n_tokens(text: str) -> int:
 
 
 # ---------------------- graph builder -----------------------------------------
-def build_graph():
+def build_graph(model: str = "qwen/qwen3-32b") -> StateGraph:
     load_dotenv()
 
     base_prompt = PromptTemplate(
@@ -41,8 +42,8 @@ def build_graph():
 
     llm = ChatGroq(
         # valid Groq model id - less powerful but cheaper alternative: llama3-8b-8192
-        model="qwen/qwen3-32b",
-        temperature=0,
+        model=model,
+        temperature=0,  # for deterministic output
         api_key=os.getenv("GROQ_API_KEY"),
     )
 
@@ -90,17 +91,36 @@ def build_graph():
     return builder.compile()
 
 
+def build_graph_with_react(model: str = "qwen/qwen3-32b") -> StateGraph:
+    load_dotenv()
+    TOOLS = get_tools()
+
+    # your custom prompt (still loaded from file)
+    base_prompt = PromptTemplate(
+        template=Path(__file__).with_name(
+            "base_prompt.txt").read_text("utf-8"),
+        input_variables=[],            # ReAct doesn’t substitute these automatically
+    )
+
+    llm = ChatGroq(model=model, temperature=0,
+                   api_key=os.getenv("GROQ_API_KEY"))
+
+    # Note: system_prompt expects a str, so use .template
+    graph = create_react_agent(
+        llm,
+        tools=TOOLS,
+        prompt=base_prompt.template,
+    )
+    return graph
+
+
 # ---------------------- CLI test ----------------------------------------------
 if __name__ == "__main__":
     load_dotenv()
     graph = build_graph()
     out = graph.invoke(
         {
-            "messages": [
-                HumanMessage(
-                    content="What is the capital of France? "
-                )
-            ],
+            "messages": [HumanMessage(content="What is the capital of France? ")],
             "input_file": "",
         }
     )

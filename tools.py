@@ -1,55 +1,30 @@
-import ast
 import base64
 import cmath
-import json
 import math
-import operator as op
 import os
-import re
 import tempfile
-import time
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Optional, Sequence
 from urllib.parse import urljoin, urlparse
 
-import numpy as np
 import pandas as pd
-import pytesseract
 import requests
-import trafilatura
-from bs4 import BeautifulSoup
-from crawl4ai import AsyncWebCrawler
 from dotenv import load_dotenv
-from duckduckgo_search import DDGS
+
+# from duckduckgo_search import DDGS
 from groq import Groq
 from langchain.agents import tool
 from langchain_community.document_loaders import ArxivLoader, WikipediaLoader
-from langchain_community.tools.tavily_search import (
-    TavilySearchResults,
-)  # replaces Serper
-from langchain_community.utilities import GoogleSerperAPIWrapper
+from langchain_tavily import TavilySearch
 from langchain_core.documents import Document
-from langchain_core.tools import tool
 from markitdown import MarkItDown
-
-# from langchain_core.messages.ai import AIMessage
-# from langchain_core.tools import AsyncTool  # for async wrapper
-
-# from langchain_google_genai import ChatGoogleGenerativeAI
-# from langchain_groq import ChatGroq
-# from langchain_huggingface import (ChatHuggingFace, HuggingFaceEmbeddings,
-#                                    HuggingFaceEndpoint)
-# from langgraph.graph import START, MessagesState, StateGraph
-# from langgraph.prebuilt import ToolNode, tools_condition
-# from markitdown import MarkItDown
-# from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
+from bs4 import BeautifulSoup
 
 load_dotenv()
 ### =============== MATHEMATICAL TOOLS =============== ###
 
 SAFE_GLOBALS = {"__builtins__": {}, "math": math}
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 # one Groq client reused for all calls
 _GROQ_CLIENT = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
@@ -174,7 +149,7 @@ def square_root(a: float) -> float | complex:
     return cmath.sqrt(a)
 
 
-# ────────────────────────  generic search utils  ───────────────────────
+### =============== GENERIC SEARCH TOOLS =============== ###
 _SEPARATOR = "\n\n---\n\n"
 
 
@@ -205,50 +180,7 @@ def wiki_search(query: str) -> str:
 
 # ─────────────────────────  web_search   ──────────────────────────
 
-
 # ``Document`` and ``_format_docs`` are provided by the host application.
-
-######################################################################
-# Public API                                                         #
-######################################################################
-# @tool
-# def web_search(query: str, max_results: int = 3) -> str:
-#     # docstring
-#     """
-#     Return up to `max_results` Google search results for *query*.
-#     The output is formatted by `_format_docs`, so it matches the schema your
-#     other tools already use.
-#     """
-
-#     docs: List[Document] = []
-
-#     try:
-#         wrapper = GoogleSerperAPIWrapper(k=max_results)
-#         result_json = wrapper.results(query)
-
-#         # Primary path — structured organic hits
-#         for hit in result_json.get("organic", [])[:max_results]:
-#             docs.append(
-#                 Document(
-#                     page_content=hit.get("snippet", ""),
-#                     metadata={"source": hit.get("link"), "page": ""},
-#                 )
-#             )
-
-#         # Fallback — single‑string answer if no organic results
-#         if not docs:
-#             answer = wrapper.run(query)
-#             docs.append(
-#                 Document(
-#                     page_content=answer,
-#                     metadata={"source": "serper", "page": ""},
-#                 )
-#             )
-#     except Exception:
-#         # Total failure → return empty formatted structure
-#         pass
-
-#     return _format_docs(docs[:max_results])
 
 
 @tool
@@ -260,7 +192,7 @@ def web_search(query: str, max_results: int = 5) -> str:
     """
     docs: list[Document] = []
     try:
-        tavily = TavilySearchResults(k=max_results)
+        tavily = TavilySearch(max_results=max_results)
         hits = tavily.run(query)  # -> list[dict]
         for hit in hits:
             docs.append(
@@ -277,14 +209,6 @@ def web_search(query: str, max_results: int = 5) -> str:
             )
         )
     return _format_docs(docs)
-
-
-@tool("crawl_page")
-async def crawl_page(url: str) -> str:
-    "Return Markdown of the given URL using Crawl4AI."
-    async with AsyncWebCrawler() as crawler:
-        res = await crawler.arun(url=url)
-        return res.markdown
 
 
 # @tool
@@ -318,7 +242,7 @@ def arxiv_search(query: str) -> str:
     return _format_docs(docs)
 
 
-# ---------- 1. Search → list of links -----------------------
+# ---------- Search → list of links -----------------------
 
 
 @tool
@@ -360,7 +284,6 @@ def list_webpage_links(url: str, same_domain_only: bool = False) -> list[str]:
 
 ### =============== DOCUMENT PROCESSING TOOLS =============== ###
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # MarkItDown initialisation
 #   • Works out-of-the-box for PDFs, Word, PowerPoint, Excel, images, etc.
@@ -368,14 +291,15 @@ def list_webpage_links(url: str, same_domain_only: bool = False) -> list[str]:
 #     is delegated to Azure Document Intelligence.
 # ─────────────────────────────────────────────────────────────────────────────
 _DOCINTEL_ENDPOINT = os.getenv("DOCINTEL_ENDPOINT")  # set in env if needed
-_MD = MarkItDown(enable_plugins=False, docintel_endpoint=_DOCINTEL_ENDPOINT or None)
+_MD = MarkItDown(enable_plugins=False,
+                 docintel_endpoint=_DOCINTEL_ENDPOINT or None)
 
 
 @tool("read_document", return_direct=True)
 def read_document(file_path: str, max_pages: Optional[int] = 10) -> str:
     """
     Extract plain text from **any** local document supported by MarkItDown
-    (PDF, DOCX, PPTX, XLSX, images, HTML,.py, etc.).
+    (PDF, DOCX, PPTX, XLSX, images, .HTML,.py, etc...).
 
     Parameters
     ----------
