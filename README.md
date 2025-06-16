@@ -20,7 +20,6 @@ The agent is built using Python and leverages the power of [LangGraph](https://l
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
 [![LangGraph](https://img.shields.io/badge/LangGraph-✓-brightgreen?logo=data:image/svg+xml;base64,PHN2ZyBmaWxsPSIjMDBDQzY4IiByb2xlPSJpbWciIHZpZXdCb3g9IjAgMCAyNCAyNCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48dGl0bGU+TGFuZ0dyYXBoPC90aXRsZT48cGF0aCBkPSJNMTIgMEM1LjM3MyAwIDAgNS4zNzMgMCAxMnM1LjM3MyAxMiAxMiAxMiAxMi01LjM3MyAxMi0xMiAxMi0xMi0xMi0xMiptMCAyYTEwIDEwIDAgMSAxIDAgMjAgMTAgMTAgMCAwIDEgMC0yMFptMCAyYTggOCAwIDEgMCAwIDE2IDggOCAwIDAgMCAwLTE2WiIvPjwvc3ZnPg==)](https://langchain-ai.github.io/langgraph/)
-[![Groq](https://img.shields.io/badge/Groq-⚡-yellow?logo=data:image/svg+xml;base64,PHN2ZyBmaWxsPSIjRkZEOEMwIiByb2xlPSJpbWciIHZpZXdCb3g9IjAgMCAyNCAyNCIgeG1zbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48dGl0bGU+R3JvcTwvdGl0bGU+PHBhdGggZD0iTTEyIDBDNS4zNzMgMCAwIDUuMzczIDAgMTJzNS4zNzMgMTIgMTIgMTIgMTItNS4zNzMgMTItMTIgMTItMTItMTItMTJ6bTAgMmExMCAxMCAwIDEgMSAwIDIwIDEwIDEwIDAgMCAxIDAtMjB6bS0xIDNoMnY2aC0yeiIvPjwvc3ZnPg==)](https://groq.com/)
 [![Hugging Face](https://img.shields.io/badge/🤗%20Hugging%20Face-Spaces-yellow)](https://huggingface.co/spaces/ecandeloro/hf_agent_gaia_30)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![UV](https://img.shields.io/badge/uv-📦-blue)](https://github.com/astral-sh/uv)
@@ -40,6 +39,22 @@ To set up the environment:
     ```bash
     uv sync
     ```
+
+### 🔑 API Keys
+
+To use this agent, you will need API keys for the following services:
+
+*   **Groq**: For fast LLM inference. You can get a key from [GroqCloud](https://console.groq.com/keys).
+*   **Tavily AI**: For the comprehensive web search tool. You can get a key from [Tavily AI](https://tavily.com/).
+
+Once you have your keys, create a `.env` file in the root of the project and add your keys like this:
+
+```env
+GROQ_API_KEY=\"gsk_YOUR_GROQ_API_KEY\"
+TAVILY_API_KEY=\"tvly-YOUR_TAVILY_API_KEY\"
+```
+
+Replace `gsk_YOUR_GROQ_API_KEY` and `tvly-YOUR_TAVILY_API_KEY` with your actual API keys. The agent will load these keys automatically.
 
 ### 🤖 Agent Architecture
 

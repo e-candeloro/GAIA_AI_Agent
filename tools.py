@@ -20,6 +20,7 @@ from langchain_tavily import TavilySearch
 from langchain_core.documents import Document
 from markitdown import MarkItDown
 from bs4 import BeautifulSoup
+from langchain_core.messages import HumanMessage  # Added for Groq summarization
 
 load_dotenv()
 ### =============== MATHEMATICAL TOOLS =============== ###
@@ -150,7 +151,7 @@ def square_root(a: float) -> float | complex:
 
 
 ### =============== GENERIC SEARCH TOOLS =============== ###
-_SEPARATOR = "\n\n---\n\n"
+_SEPARATOR = "\\n\\n---\\n\\n"
 
 
 def _format_docs(docs: Sequence, max_chars: int = 5000) -> str:
@@ -210,6 +211,86 @@ def web_search(query: str, max_results: int = 5) -> str:
         )
     return _format_docs(docs)
 
+
+@tool
+def comprehensive_web_search(query: str, num_pages_to_browse: int = 3) -> str:
+    """
+    Performs a web search using Tavily, then downloads, reads, and summarizes content
+    from the top N pages to provide a comprehensive answer to the query.
+    Requires TAVILY_API_KEY and GROQ_API_KEY in env.
+
+    Args:
+        query (str): The search query.
+        num_pages_to_browse (int): The number of top search results to browse for content. Defaults to 3.
+
+    Returns:
+        str: A compiled string of relevant information from the browsed pages,
+             or an error message if issues occur.
+    """
+    all_processed_contents = []
+    try:
+        # Fetch a bit more to choose from
+        tavily = TavilySearch(max_results=num_pages_to_browse + 2)
+        # Use .search to get structured results
+        hits = tavily.search(query=query)
+
+        if not hits:
+            return "No search results found by Tavily."
+
+        urls_to_browse = [hit["url"] for hit in hits[:num_pages_to_browse]]
+
+        for i, hit_url in enumerate(urls_to_browse):
+            all_processed_contents.append(f"Browsing page {i+1}: {hit_url}")
+            download_status = download_file_from_url(
+                url=hit_url)  # Let the tool handle filename
+
+            if download_status.startswith("File downloaded to "):
+                local_path = download_status.replace(
+                    "File downloaded to ", "").split(". You can read")[0]
+
+                page_content = read_document(file_path=local_path)
+
+                if page_content.startswith("[read_document error]") or page_content == "[read_document] no text found":
+                    processed_content = f"Could not retrieve content from {hit_url}. Error: {page_content}"
+                else:
+                    # Summarize if content is too long (e.g., > 15000 chars, roughly 3k-4k tokens)
+                    if len(page_content) > 15000:
+                        try:
+                            summarization_prompt_text = (
+                                f"Given the user's search query \'{query}\', please provide a concise summary of the following text. "
+                                f"Focus on the information most relevant to answering the query. The text is from {hit_url}. "
+                                f"If the text seems irrelevant, state that. Output only the summary or the statement of irrelevance."
+                                # Limit input to summarizer
+                                f"\\n\\nText to summarize:\\n\\n{page_content[:25000]}"
+                            )
+
+                            resp = _GROQ_CLIENT.chat.completions.create(
+                                model="llama3-8b-8192",  # Use a cost-effective model for summarization
+                                messages=[HumanMessage(
+                                    content=summarization_prompt_text)],
+                                temperature=0.2,
+                            )
+                            summary = resp.choices[0].message.content.strip()
+                            processed_content = f"Summary from {hit_url}:\\n{summary}"
+                        except Exception as e:
+                            processed_content = f"Could not summarize content from {hit_url}. Error: {e}. Raw content snippet (first 500 chars):\\n{page_content[:500]}"
+                    else:
+                        processed_content = f"Content from {hit_url}:\\n{page_content}"
+                all_processed_contents.append(processed_content)
+                # Consider deleting the local_path file here if it's temporary and no longer needed
+                # try:
+                #     os.remove(local_path)
+                # except OSError:
+                #     pass # Ignore if deletion fails
+            else:
+                all_processed_contents.append(
+                    f"Failed to download {hit_url}: {download_status}")
+            all_processed_contents.append("---")
+
+    except Exception as e:
+        return f"An error occurred during comprehensive web search: {str(e)}"
+
+    return "\\n\\n".join(all_processed_contents)
 
 # @tool
 # def web_search(query: str, max_results: int = 3) -> str:
@@ -584,4 +665,16 @@ tools = [
 
 def get_tools() -> list:
     """Return the curated list of LangChain tools."""
-    return tools
+    # Add the new tool to the list
+    updated_tools = tools[:]  # Create a copy
+    # Ensure it's not duplicated if script is run multiple times
+    if comprehensive_web_search not in updated_tools:
+        # Insert comprehensive_web_search after web_search for logical grouping
+        try:
+            web_search_index = updated_tools.index(web_search)
+            updated_tools.insert(web_search_index + 1,
+                                 comprehensive_web_search)
+        except ValueError:
+            # If web_search is not found for some reason, just append
+            updated_tools.append(comprehensive_web_search)
+    return updated_tools
