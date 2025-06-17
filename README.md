@@ -28,6 +28,7 @@ The agent is built using Python and leverages the power of [LangGraph](https://l
 <p align="center">
   <img src="media/demo_agent_ui.png" alt="demo_ui_screen" style="max-width: 600px; width: 100%;">
 </p>
+
 ### 🛠️ Setup with `uv`
 
 This project uses `uv` for Python package management. `uv` is a fast Python package installer and resolver, written in Rust.
